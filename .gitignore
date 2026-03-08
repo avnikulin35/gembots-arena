@@ -58,3 +58,15 @@ contracts/test-ledger/
 **/node_modules/
 supabase/.temp/
 bot/active-games.json
+
+# Internal ops — not for public repo
+ecosystem.config.js
+twitter-*.md
+tweet-queue.json
+post-next-tweet.sh
+CONTENT-PLAN.md
+GROWTH-PLAN.md
+supabase-*.sql
+supabase/migrations/
+supabase/model-leaderboard-migration.sql
+launch-mode.json
