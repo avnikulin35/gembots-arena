@@ -139,7 +139,7 @@ async function getPerformance(hoursBack) {
 async function getBots() {
   const { data: bots, error } = await supabase
     .from('bots')
-    .select('id, name, strategy, ai_model, elo, is_npc, trading_config, strategy_cache')
+    .select('id, name, strategy, model_id, elo, is_npc, trading_config, strategy_cache')
     .eq('is_npc', true); // Only evolve NPC (host) bots
 
   if (error) throw new Error(`Failed to fetch bots: ${error.message}`);
@@ -167,7 +167,7 @@ async function buildModelStrategyMatrix(hoursBack) {
   // Get all bots with model info
   const { data: bots } = await supabase
     .from('bots')
-    .select('id, ai_model, strategy');
+    .select('id, model_id, strategy');
   
   const botMap = {};
   for (const b of bots || []) botMap[b.id] = b;
@@ -178,9 +178,9 @@ async function buildModelStrategyMatrix(hoursBack) {
     for (const side of ['bot1_id', 'bot2_id']) {
       const botId = b[side];
       const bot = botMap[botId];
-      if (!bot || !bot.ai_model || !bot.strategy) continue;
-      const key = `${bot.ai_model}|${bot.strategy}`;
-      if (!matrix[key]) matrix[key] = { model: bot.ai_model, style: bot.strategy, wins: 0, total: 0 };
+      if (!bot || !bot.model_id || !bot.strategy) continue;
+      const key = `${bot.model_id}|${bot.strategy}`;
+      if (!matrix[key]) matrix[key] = { model: bot.model_id, style: bot.strategy, wins: 0, total: 0 };
       matrix[key].total++;
       if (b.winner_id === botId) matrix[key].wins++;
     }
@@ -331,7 +331,7 @@ async function evolve() {
     // Find bots that should switch to their model's best style
     const modelOptimizations = [];
     for (const bot of ranked) {
-      const best = msMatrix.bestPerModel[bot.ai_model];
+      const best = msMatrix.bestPerModel[bot.model_id];
       if (!best) continue;
       if (bot.strategy === best.style) continue; // Already optimal
       if (best.winRate < 0.5) continue; // Don't optimize to a losing style
@@ -341,7 +341,7 @@ async function evolve() {
       if (alreadyMutated) continue;
       
       // Only optimize if significant difference
-      const currentEntry = msMatrix.matrix.find(m => m.model === bot.ai_model && m.style === bot.strategy);
+      const currentEntry = msMatrix.matrix.find(m => m.model === bot.model_id && m.style === bot.strategy);
       const currentWR = currentEntry ? currentEntry.wins / currentEntry.total : 0;
       const improvement = best.winRate - currentWR;
       
@@ -349,7 +349,7 @@ async function evolve() {
         modelOptimizations.push({
           botId: bot.id,
           botName: bot.name,
-          model: bot.ai_model,
+          model: bot.model_id,
           oldStyle: bot.strategy,
           newStyle: best.style,
           oldWR: currentWR,
