@@ -80,7 +80,7 @@ pm2 startup
 ## API Integration
 
 Бот интегрируется с GemBots API:
-- **Base URL:** `https://gembots.ainmid.com`
+- **Base URL:** `https://gembots.space`
 - **Регистрация:** `POST /api/v1/bots/register`
 - **Predictions:** `POST /api/v1/predictions`
 - **Trending:** `GET /api/trending`

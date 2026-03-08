@@ -83,3 +83,34 @@ design-concepts/robots/generate_all.sh
 design-concepts/robots/states/
 design-concepts/robots/v3/generate_all.sh
 erc8004/*.mjs
+
+# Build artifacts with local paths
+contracts/bsc/cache/
+contracts/cache/
+contracts/bsc/artifacts/build-info/
+.archive/
+
+# Internal scripts
+post-thread.sh
+reply-game.sh
+build-in-public-thread.json
+twitter-log.md
+
+# Internal applications
+MVB-APPLICATION.md
+
+# Skill packaging (has internal refs)
+skill/
+
+# Old Solana contracts (project is BSC only)
+contracts/programs/
+contracts/Anchor.toml
+contracts/Cargo.*
+contracts/migrations/
+contracts/tests/
+
+# Bot state files
+bot/active-games.json
+bot/users.json
+bot/*.bak*
+proxy.ts
