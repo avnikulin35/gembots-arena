@@ -43,9 +43,9 @@ export async function GET(request: Request) {
     // Distinct models
     const { data: modelsData } = await supabase
       .from('bots')
-      .select('model_id, ai_model');
+      .select('model_id');
     const uniqueModels = new Set(
-      (modelsData || []).map((b) => b.model_id || b.ai_model).filter(Boolean)
+      (modelsData || []).map((b) => b.model_id).filter(Boolean)
     );
 
     // First and last battle

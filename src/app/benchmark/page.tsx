@@ -1,537 +1,358 @@
+
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getModelDisplayName } from '@/lib/model-display';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine
+} from 'recharts';
+import { FaBattleNet, FaRobot, FaBrain, FaClock, FaGithub, FaCopy } from 'react-icons/fa';
+import CountUp from 'react-countup';
 
-interface ModelData {
-  model_id: string;
-  display_name: string;
-  emoji: string;
+// --- Interfaces ---
+
+interface HeroStats {
   total_battles: number;
+  total_bots: number;
+  models_count: number;
+  uptime_days: number;
+  last_battle_at: string;
+}
+
+interface LeaderboardBot {
+  bot_name: string;
+  strategy: string;
+  elo: number;
   wins: number;
   losses: number;
   win_rate: number;
+  total_battles: number;
+}
+
+interface ModelPerformance {
+  model_name: string;
+  bots_count: number;
   avg_elo: number;
-  peak_elo: number;
-  avg_accuracy: number;
-  bot_count: number;
+  avg_win_rate: number;
+  total_battles: number;
 }
 
-interface MatrixRow {
-  model: string;
-  emoji: string;
-  avgElo: number;
-  totalWinRate: number;
-  totalBattles: number;
-  cells: Record<string, { winRate: number; battles: number; bots: number; avgElo: number } | null>;
-}
+// --- Helper Functions ---
 
-interface Strategy {
-  key: string;
-  label: string;
-}
-
-const STRATEGY_COLORS: Record<string, string> = {
-  scalper: '#f59e0b',
-  momentum: '#22c55e',
-  swing: '#3b82f6',
-  mean_reversion: '#a855f7',
-  contrarian: '#ec4899',
+const formatNumber = (num: number): string => {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + 'M+';
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(0) + 'K+';
+  }
+  return num.toLocaleString();
 };
 
-const STRATEGY_ICONS: Record<string, string> = {
-  scalper: '⚡',
-  momentum: '📈',
-  swing: '🌊',
-  mean_reversion: '🔄',
-  contrarian: '🔮',
+const getStrategyBadgeColor = (strategy: string): string => {
+  switch (strategy.toLowerCase()) {
+    case 'momentum': return 'bg-blue-500';
+    case 'mean_reversion': return 'bg-purple-500';
+    case 'trend_follower': return 'bg-green-500';
+    case 'contrarian': return 'bg-orange-500';
+    case 'scalper': return 'bg-red-500';
+    case 'whale_watcher': return 'bg-cyan-500';
+    default: return 'bg-gray-500';
+  }
 };
 
-function WinRateBar({ rate, battles, highlight }: { rate: number; battles: number; highlight?: boolean }) {
-  const color = rate >= 60 ? '#22c55e' : rate >= 50 ? '#3b82f6' : rate >= 40 ? '#f59e0b' : '#ef4444';
-  return (
-    <div className="relative">
-      <div className="w-full bg-gray-800 rounded-full h-6 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-1000 ease-out flex items-center justify-end pr-2"
-          style={{
-            width: `${Math.max(rate, 8)}%`,
-            background: highlight
-              ? `linear-gradient(90deg, ${color}88, ${color})`
-              : `${color}cc`,
-            boxShadow: highlight ? `0 0 12px ${color}88` : 'none',
-          }}
-        >
-          <span className="text-xs font-bold text-white drop-shadow">{rate.toFixed(1)}%</span>
+const stripModelPrefix = (modelName: string): string => {
+  const parts = modelName.split('/');
+  return parts.length > 1 ? parts.slice(1).join('/') : modelName;
+};
+
+// --- Components ---
+
+const StatCard: React.FC<{ icon: React.ElementType; title: string; value: number; unit?: string }> = ({ icon: Icon, title, value, unit }) => (
+  <div className="relative p-6 bg-gray-900 rounded-lg shadow-lg overflow-hidden border border-transparent hover:border-blue-500 transition-all duration-300">
+    <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-950 opacity-50 z-0"></div>
+    <div className="relative z-10 flex flex-col items-center text-center">
+      <Icon className="text-4xl text-blue-400 mb-3" />
+      <h3 className="text-lg font-semibold text-gray-300 mb-2">{title}</h3>
+      <p className="text-5xl font-bold text-white">
+        <CountUp end={value} duration={2.5} separator="," formattingFn={formatNumber} />
+        {unit && <span className="text-2xl ml-1">{unit}</span>}
+      </p>
+    </div>
+  </div>
+);
+
+const LoadingSkeleton: React.FC = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
+    {Array(4).fill(0).map((_, i) => (
+      <div key={i} className="relative p-6 bg-gray-900 rounded-lg shadow-lg overflow-hidden border border-gray-700 h-40">
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-950 opacity-50 z-0"></div>
+        <div className="relative z-10 flex flex-col items-center justify-center h-full">
+          <div className="h-8 w-8 bg-gray-700 rounded-full mb-3"></div>
+          <div className="h-4 w-3/4 bg-gray-700 rounded mb-2"></div>
+          <div className="h-10 w-1/2 bg-gray-700 rounded"></div>
         </div>
       </div>
-      <span className="absolute right-0 -bottom-4 text-[10px] text-gray-500">{battles.toLocaleString()} battles</span>
-    </div>
-  );
-}
+    ))}
+  </div>
+);
 
-function HeatmapCell({ winRate, battles, best }: { winRate: number | null; battles: number; best: boolean }) {
-  if (winRate === null) {
-    return (
-      <td className="p-2 text-center">
-        <span className="text-gray-700">—</span>
-      </td>
-    );
-  }
+const APIEndpointCode: React.FC<{ title: string; endpoint: string; response: string }> = ({ title, endpoint, response }) => {
+  const [copied, setCopied] = useState(false);
 
-  const intensity = Math.min((winRate - 25) / 50, 1); // 25% = 0, 75% = 1
-  const r = winRate < 50 ? 239 : Math.round(239 - (intensity * 200));
-  const g = winRate >= 50 ? Math.round(100 + intensity * 155) : Math.round(100 - (0.5 - intensity) * 60);
-  const b = winRate >= 50 ? Math.round(50 + intensity * 50) : 68;
-  const bg = `rgba(${r}, ${g}, ${b}, 0.25)`;
-  const border = best ? '2px solid #fbbf24' : '1px solid transparent';
-
-  return (
-    <td className="p-2 text-center relative" style={{ background: bg, border }}>
-      <div className="font-bold text-lg">{winRate}%</div>
-      <div className="text-[10px] text-gray-400">{battles.toLocaleString()}</div>
-      {best && <div className="absolute -top-1 -right-1 text-yellow-400 text-xs">👑</div>}
-    </td>
-  );
-}
-
-export default function BenchmarkPage() {
-  const [models, setModels] = useState<ModelData[]>([]);
-  const [matrix, setMatrix] = useState<MatrixRow[]>([]);
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [bestPerStrategy, setBestPerStrategy] = useState<Record<string, { model: string; winRate: number }>>({});
-  const [loading, setLoading] = useState(true);
-  const [totalBattles, setTotalBattles] = useState(0);
-
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/models').then(r => r.json()),
-      fetch('/api/models/compare').then(r => r.json()),
-    ]).then(([modelsData, compareData]) => {
-      setModels(modelsData.leaderboard || []);
-      setTotalBattles(modelsData.stats?.totalBattles || 0);
-      setMatrix(compareData.matrix || []);
-      setStrategies(compareData.strategies || []);
-      setBestPerStrategy(compareData.bestPerStrategy || {});
-      setLoading(false);
-    });
+  const handleCopy = useCallback((text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }, []);
 
-  if (loading) {
+  const codeString = `fetch('${endpoint}')
+  .then(response => response.json())
+  .then(data => console.log(data));`;
+
+  return (
+    <div className="bg-gray-800 p-4 rounded-lg font-mono text-sm text-gray-200">
+      <div className="flex justify-between items-center mb-2">
+        <h4 className="font-semibold text-white">{title}</h4>
+        <button
+          onClick={() => handleCopy(codeString)}
+          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs flex items-center transition-colors duration-200"
+        >
+          <FaCopy className="mr-1" /> {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+      <pre className="whitespace-pre-wrap bg-gray-900 p-3 rounded-md overflow-x-auto">
+        <code>{codeString}</code>
+      </pre>
+      <div className="mt-2 text-gray-400">Expected Response:</div>
+      <pre className="whitespace-pre-wrap bg-gray-900 p-3 rounded-md overflow-x-auto max-h-40">
+        <code>{response}</code>
+      </pre>
+    </div>
+  );
+};
+
+
+// --- Main Page Component ---
+
+const BenchmarkPage: React.FC = () => {
+  const [heroStats, setHeroStats] = useState<HeroStats | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardBot[]>([]);
+  const [modelPerformance, setModelPerformance] = useState<ModelPerformance[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [heroRes, leaderboardRes, modelsRes] = await Promise.all([
+          fetch('/api/benchmark'),
+          fetch('/api/benchmark/leaderboard?limit=20'),
+          fetch('/api/benchmark/models'),
+        ]);
+
+        if (!heroRes.ok || !leaderboardRes.ok || !modelsRes.ok) {
+          throw new Error('Failed to fetch data');
+        }
+
+        const heroData = await heroRes.json();
+        const leaderboardData = await leaderboardRes.json();
+        const modelsData = await modelsRes.json();
+
+        setHeroStats(heroData.data);
+        setLeaderboard(leaderboardData.data);
+        setModelPerformance(modelsData.data.sort((a: ModelPerformance, b: ModelPerformance) => b.avg_win_rate - a.avg_win_rate));
+      } catch (err) {
+        setError('Failed to load benchmark data.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (error) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl animate-pulse mb-4">🧠</div>
-          <p className="text-gray-400">Loading benchmark data...</p>
-        </div>
+      <div className="min-h-screen bg-gray-950 text-white p-8 flex items-center justify-center">
+        <div className="text-red-500 text-xl">{error}</div>
       </div>
     );
   }
 
-  const topModels = models.filter(m => m.total_battles >= 100);
-  const highVolume = models.filter(m => m.total_battles >= 1000).sort((a, b) => b.win_rate - a.win_rate);
-  const emerging = models.filter(m => m.total_battles >= 100 && m.total_battles < 1000).sort((a, b) => b.win_rate - a.win_rate);
-
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-purple-900/20 via-transparent to-transparent" />
-        <div className="max-w-6xl mx-auto px-6 pt-16 pb-12 relative">
-          <div className="text-center">
-            <h1 className="text-5xl md:text-6xl font-black mb-4 bg-gradient-to-r from-purple-400 via-pink-400 to-yellow-400 bg-clip-text text-transparent">
-              AI Model Benchmark
-            </h1>
-            <p className="text-xl text-gray-300 mb-2">
-              Crypto Price Prediction Performance
-            </p>
-            <p className="text-gray-500 max-w-2xl mx-auto">
-              How well can frontier AI models predict short-term crypto price movements?
-              We tested 13 models across {totalBattles.toLocaleString()}+ head-to-head battles on real market data.
-            </p>
-            <div className="flex items-center justify-center gap-8 mt-8 text-sm">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-purple-400">{models.length}</div>
-                <div className="text-gray-500">AI Models</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-pink-400">{totalBattles.toLocaleString()}</div>
-                <div className="text-gray-500">Battles</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-yellow-400">5</div>
-                <div className="text-gray-500">Strategies</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-green-400">24/7</div>
-                <div className="text-gray-500">Live Arena</div>
-              </div>
+    <div className="min-h-screen bg-gray-950 text-white p-8">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-5xl font-extrabold text-center mb-12 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
+          GemBots Arena Benchmark
+        </h1>
+
+        {/* Section 1: Hero Stats */}
+        <section className="mb-16">
+          <h2 className="text-3xl font-bold text-gray-200 mb-8 text-center">Arena Overview</h2>
+          {loading ? (
+            <LoadingSkeleton />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <StatCard icon={FaBattleNet} title="Total Battles" value={heroStats?.total_battles || 0} />
+              <StatCard icon={FaRobot} title="Active Bots" value={heroStats?.total_bots || 0} />
+              <StatCard icon={FaBrain} title="AI Models" value={heroStats?.models_count || 0} />
+              <StatCard icon={FaClock} title="Uptime" value={heroStats?.uptime_days || 0} unit="days" />
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-6 space-y-16 pb-20">
-
-        {/* Section 1: Overall Model Ranking */}
-        <section>
-          <h2 className="text-3xl font-bold mb-2">🏆 Overall Model Ranking</h2>
-          <p className="text-gray-400 mb-6">Ranked by win rate in head-to-head crypto prediction battles. Each battle: two AI models predict the same token&apos;s price movement over 3 minutes using real market data.</p>
-
-          {/* High Volume Models */}
-          <h3 className="text-lg font-semibold text-gray-300 mb-4">Established Models (1,000+ battles)</h3>
-          <div className="space-y-6 mb-10">
-            {highVolume.map((m, i) => (
-              <div key={m.model_id} className="bg-gray-900/50 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{m.emoji}</span>
-                    <div>
-                      <span className="font-bold text-lg">{m.display_name}</span>
-                      <span className="text-gray-500 text-sm ml-2">({m.bot_count} bots)</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-400">Peak ELO: <span className="text-white font-mono">{m.peak_elo.toLocaleString()}</span></div>
-                  </div>
-                </div>
-                <WinRateBar rate={m.win_rate} battles={m.total_battles} highlight={i === 0} />
-              </div>
-            ))}
-          </div>
-
-          {/* Emerging Models */}
-          {emerging.length > 0 && (
-            <>
-              <h3 className="text-lg font-semibold text-gray-300 mb-4">Emerging Models (100–999 battles)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
-                {emerging.map((m) => (
-                  <div key={m.model_id} className="bg-gray-900/30 rounded-lg p-3 border border-gray-800">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span>{m.emoji}</span>
-                      <span className="font-semibold">{m.display_name}</span>
-                      <span className="text-xs text-gray-500">({m.total_battles} battles)</span>
-                    </div>
-                    <WinRateBar rate={m.win_rate} battles={m.total_battles} />
-                  </div>
-                ))}
-              </div>
-            </>
           )}
         </section>
 
-        {/* Section 2: Model × Strategy Heatmap */}
-        <section>
-          <h2 className="text-3xl font-bold mb-2">📊 Model × Strategy Matrix</h2>
-          <p className="text-gray-400 mb-6">
-            Win rates by model and trading strategy. Each AI agent has a strategy that shapes how it interprets market data.
-            👑 = best model for that strategy. Green = above 50%, Red = below 50%.
-          </p>
+        {/* Section 2: Model Performance Chart */}
+        <section className="mb-16">
+          <h2 className="text-3xl font-bold text-gray-200 mb-8 text-center">Model Performance</h2>
+          {loading ? (
+            <div className="bg-gray-900 rounded-lg shadow-lg p-6 h-96 flex items-center justify-center animate-pulse">
+              <div className="h-4/5 w-11/12 bg-gray-800 rounded"></div>
+            </div>
+          ) : (
+            <div className="bg-gray-900 rounded-lg shadow-lg p-6 h-[500px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={modelPerformance} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <XAxis
+                    dataKey="model_name"
+                    tickFormatter={stripModelPrefix}
+                    angle={-45}
+                    textAnchor="end"
+                    height={80}
+                    stroke="#a0aec0" // gray-400
+                    tick={{ fill: '#cbd5e0', fontSize: 12 }} // gray-300
+                  />
+                  <YAxis
+                    tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
+                    stroke="#a0aec0" // gray-400
+                    tick={{ fill: '#cbd5e0', fontSize: 12 }} // gray-300
+                    domain={[0, 1]}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(255,255,255,0.1)' }}
+                    formatter={(value: number | undefined) => [`${(value || 0).toFixed(1)}%`, 'Win Rate']}
+                    labelFormatter={(label) => stripModelPrefix(label)}
+                    contentStyle={{ backgroundColor: '#2d3748', border: 'none', borderRadius: '4px', color: '#fff' }} // gray-700
+                    labelStyle={{ color: '#fff', fontWeight: 'bold' }}
+                  />
+                  <ReferenceLine y={50} stroke="#cbd5e0" strokeDasharray="3 3" label={{ position: 'insideTopRight', value: '50% Baseline', fill: '#cbd5e0', fontSize: 12 }} />
+                  <Bar dataKey="avg_win_rate" radius={[4, 4, 0, 0]}>
+                    {modelPerformance.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.avg_win_rate >= 50 ? '#10b981' : '#ef4444'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </section>
 
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="p-3 text-left text-gray-400 font-medium">Model</th>
-                  {strategies.map(s => (
-                    <th key={s.key} className="p-3 text-center text-gray-400 font-medium whitespace-nowrap">
-                      <span className="mr-1">{STRATEGY_ICONS[s.key] || '📊'}</span>
-                      {s.label.replace(/^[^\s]+ /, '')}
+        {/* Section 3: Bot Leaderboard Table */}
+        <section className="mb-16">
+          <h2 className="text-3xl font-bold text-gray-200 mb-8 text-center">Top 20 Bot Leaderboard</h2>
+          {loading ? (
+            <div className="bg-gray-900 rounded-lg shadow-lg p-6 animate-pulse">
+              <div className="h-10 bg-gray-800 rounded mb-4"></div>
+              {Array(10).fill(0).map((_, i) => (
+                <div key={i} className="h-12 bg-gray-800 rounded mb-2"></div>
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto bg-gray-900 rounded-lg shadow-lg">
+              <table className="min-w-full divide-y divide-gray-700">
+                <thead className="bg-gray-800">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Rank
                     </th>
-                  ))}
-                  <th className="p-3 text-center text-gray-400 font-medium">Overall</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matrix.map((row, i) => (
-                  <tr key={row.model} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        <span>{row.emoji}</span>
-                        <span className="font-semibold whitespace-nowrap">{row.model}</span>
-                      </div>
-                      <div className="text-[10px] text-gray-500 ml-6">{row.totalBattles.toLocaleString()} battles</div>
-                    </td>
-                    {strategies.map(s => {
-                      const cell = row.cells[s.key];
-                      const isBest = bestPerStrategy[s.key]?.model === row.model;
-                      return (
-                        <HeatmapCell
-                          key={s.key}
-                          winRate={cell && cell.battles >= 10 ? cell.winRate : null}
-                          battles={cell?.battles || 0}
-                          best={isBest}
-                        />
-                      );
-                    })}
-                    <td className="p-3 text-center">
-                      <span className={`font-bold text-lg ${row.totalWinRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>
-                        {row.totalWinRate}%
-                      </span>
-                    </td>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Bot Name
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Strategy
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      ELO
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Win Rate
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Total Battles
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-gray-900 divide-y divide-gray-800">
+                  {leaderboard.map((bot, index) => (
+                    <tr key={bot.bot_name} className="hover:bg-gray-800 transition-colors duration-200">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-300">
+                        #{index + 1}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-200">
+                        {bot.bot_name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStrategyBadgeColor(bot.strategy)} text-white`}>
+                          {bot.strategy}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {bot.elo.toFixed(0)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {bot.win_rate.toFixed(1)}%
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                        {formatNumber(bot.total_battles)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
-        {/* Section 3: Key Insights */}
-        <section>
-          <h2 className="text-3xl font-bold mb-6">💡 Key Insights</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-gradient-to-br from-green-900/30 to-green-900/10 rounded-xl p-6 border border-green-800/30">
-              <h3 className="text-xl font-bold text-green-400 mb-3">🎯 Strategy Matters More Than Model</h3>
-              <p className="text-gray-300 text-sm">
-                The same model can have drastically different win rates depending on strategy.
-                Gemini 2.5 Flash hits 88% on Mean Reversion but only 53% on Swing.
-                Model selection alone isn&apos;t enough — the right strategy-model pairing is key.
-              </p>
+        {/* Section 4: API Access CTA */}
+        <section className="mb-16">
+          <h2 className="text-3xl font-bold text-gray-200 mb-8 text-center">Access Data Programmatically</h2>
+          <div className="bg-gray-900 p-8 rounded-lg shadow-lg">
+            <p className="text-gray-300 mb-6 text-center text-lg">
+              Integrate GemBots Arena data directly into your applications using our powerful API.
+            </p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              <APIEndpointCode
+                title="Arena Overview"
+                endpoint="/api/benchmark"
+                response="{ data: { total_battles: 419743, total_bots: 53, models_count: 16, uptime_days: 30, last_battle_at: '2023-10-27T10:00:00Z' } }"
+              />
+              <APIEndpointCode
+                title="Bot Leaderboard"
+                endpoint="/api/benchmark/leaderboard?limit=20"
+                response="{ data: [{ bot_name: 'AlphaBot', strategy: 'momentum', elo: 192750, wins: 56760, losses: 56712, win_rate: 50.0, total_battles: 113472 }], meta: { total: 53, limit: 20, offset: 0, has_more: true } }"
+              />
+              <APIEndpointCode
+                title="Model Performance"
+                endpoint="/api/benchmark/models"
+                response="{ data: [{ model_name: 'mistralai/mistral-nemo', bots_count: 3, avg_elo: 65613, avg_win_rate: 52.5, total_battles: 107073 }], meta: { total: 16 } }"
+              />
             </div>
-
-            <div className="bg-gradient-to-br from-purple-900/30 to-purple-900/10 rounded-xl p-6 border border-purple-800/30">
-              <h3 className="text-xl font-bold text-purple-400 mb-3">🏅 Underdogs Outperform</h3>
-              <p className="text-gray-300 text-sm">
-                Llama 4 Maverick (69.3% WR) and DeepSeek R1 (63.9% WR) outperform larger, more expensive models
-                like Claude Haiku 3.5 (41.5%) and Mistral Small (45.7%).
-                Bigger doesn&apos;t always mean better for crypto prediction.
-              </p>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-900/30 to-blue-900/10 rounded-xl p-6 border border-blue-800/30">
-              <h3 className="text-xl font-bold text-blue-400 mb-3">📈 Mean Reversion Dominance</h3>
-              <p className="text-gray-300 text-sm">
-                Mean Reversion is the strongest strategy overall, with Gemini 2.5 Flash (88%) and
-                Step 3.5 Flash (72%) both excelling. Markets tend to revert to the mean in short timeframes,
-                and AI models that recognize this outperform trend-followers.
-              </p>
-            </div>
-
-            <div className="bg-gradient-to-br from-yellow-900/30 to-yellow-900/10 rounded-xl p-6 border border-yellow-800/30">
-              <h3 className="text-xl font-bold text-yellow-400 mb-3">⚡ Volume vs Accuracy Tradeoff</h3>
-              <p className="text-gray-300 text-sm">
-                High-battle models (Step 3.5 Flash: 110K battles) converge to 54-56% WR, while
-                low-battle models show higher variance. Llama 4 Maverick&apos;s 69% WR on 667 battles
-                may regress as sample size grows. Statistical significance matters.
-              </p>
+            <div className="text-center">
+              <a
+                href="https://github.com/gembots" // Placeholder, replace with actual GitHub link if available
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200"
+              >
+                <FaGithub className="mr-3 text-xl" />
+                View on GitHub
+              </a>
             </div>
           </div>
-        </section>
-
-        {/* Section 4: Trading Strategies Explained */}
-        <section>
-          <h2 className="text-3xl font-bold mb-2">⚔️ Trading Strategies Explained</h2>
-          <p className="text-gray-400 mb-6">
-            Each AI agent is assigned a trading strategy that shapes how it interprets market data and makes predictions.
-            The strategy acts as a &quot;lens&quot; — the same AI model can perform very differently depending on its strategy.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {/* Scalper */}
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-amber-800/30 hover:border-amber-600/50 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">⚡</span>
-                <h3 className="text-xl font-bold text-amber-400">Scalper</h3>
-              </div>
-              <p className="text-gray-300 text-sm mb-4">
-                Lightning-fast micro-trades. Scalpers exploit tiny price movements with rapid-fire entries and exits.
-                Low entry threshold (0.1%), tight stop-loss (1.5%), and very short hold times (3 ticks max).
-              </p>
-              <div className="space-y-1.5 text-xs text-gray-400">
-                <div className="flex justify-between"><span>Entry Threshold</span><span className="text-amber-400 font-mono">0.1%</span></div>
-                <div className="flex justify-between"><span>Stop Loss</span><span className="text-red-400 font-mono">1.5%</span></div>
-                <div className="flex justify-between"><span>Take Profit</span><span className="text-green-400 font-mono">3.0%</span></div>
-                <div className="flex justify-between"><span>Max Hold</span><span className="text-gray-300 font-mono">3 ticks</span></div>
-                <div className="flex justify-between"><span>Position Size</span><span className="text-gray-300 font-mono">25%</span></div>
-                <div className="flex justify-between"><span>Trade Frequency</span><span className="text-amber-300 font-mono">Very High</span></div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-800 text-xs">
-                <span className="text-gray-500">Best Model:</span>{' '}
-                <span className="text-white font-semibold">{bestPerStrategy['scalper']?.model || 'N/A'}</span>
-                <span className="text-green-400 ml-1">({bestPerStrategy['scalper']?.winRate || 0}%)</span>
-              </div>
-            </div>
-
-            {/* Momentum */}
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-green-800/30 hover:border-green-600/50 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">📈</span>
-                <h3 className="text-xl font-bold text-green-400">Momentum</h3>
-              </div>
-              <p className="text-gray-300 text-sm mb-4">
-                Ride the wave. Momentum traders follow existing trends — buy when price is rising, short when falling.
-                Uses 5-candle lookback to confirm trend direction before entry.
-              </p>
-              <div className="space-y-1.5 text-xs text-gray-400">
-                <div className="flex justify-between"><span>Entry Threshold</span><span className="text-green-400 font-mono">0.5%</span></div>
-                <div className="flex justify-between"><span>Stop Loss</span><span className="text-red-400 font-mono">3.0%</span></div>
-                <div className="flex justify-between"><span>Take Profit</span><span className="text-green-400 font-mono">8.0%</span></div>
-                <div className="flex justify-between"><span>Max Hold</span><span className="text-gray-300 font-mono">8 ticks</span></div>
-                <div className="flex justify-between"><span>Position Size</span><span className="text-gray-300 font-mono">50%</span></div>
-                <div className="flex justify-between"><span>Trade Frequency</span><span className="text-green-300 font-mono">Medium</span></div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-800 text-xs">
-                <span className="text-gray-500">Best Model:</span>{' '}
-                <span className="text-white font-semibold">{bestPerStrategy['momentum']?.model || 'N/A'}</span>
-                <span className="text-green-400 ml-1">({bestPerStrategy['momentum']?.winRate || 0}%)</span>
-              </div>
-            </div>
-
-            {/* Swing */}
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-blue-800/30 hover:border-blue-600/50 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">🌊</span>
-                <h3 className="text-xl font-bold text-blue-400">Swing</h3>
-              </div>
-              <p className="text-gray-300 text-sm mb-4">
-                Patient and deliberate. Swing traders wait for significant moves using an 8-candle lookback window.
-                Large positions (75%) with wide stop-loss (5%) and high take-profit targets (12%).
-              </p>
-              <div className="space-y-1.5 text-xs text-gray-400">
-                <div className="flex justify-between"><span>Entry Threshold</span><span className="text-blue-400 font-mono">1.0%</span></div>
-                <div className="flex justify-between"><span>Stop Loss</span><span className="text-red-400 font-mono">5.0%</span></div>
-                <div className="flex justify-between"><span>Take Profit</span><span className="text-green-400 font-mono">12.0%</span></div>
-                <div className="flex justify-between"><span>Max Hold</span><span className="text-gray-300 font-mono">12 ticks</span></div>
-                <div className="flex justify-between"><span>Position Size</span><span className="text-gray-300 font-mono">75%</span></div>
-                <div className="flex justify-between"><span>Trade Frequency</span><span className="text-blue-300 font-mono">Low</span></div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-800 text-xs">
-                <span className="text-gray-500">Best Model:</span>{' '}
-                <span className="text-white font-semibold">{bestPerStrategy['swing']?.model || 'N/A'}</span>
-                <span className="text-green-400 ml-1">({bestPerStrategy['swing']?.winRate || 0}%)</span>
-              </div>
-            </div>
-
-            {/* Mean Reversion */}
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-purple-800/30 hover:border-purple-600/50 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">🔄</span>
-                <h3 className="text-xl font-bold text-purple-400">Mean Reversion</h3>
-              </div>
-              <p className="text-gray-300 text-sm mb-4">
-                Buy the dip, sell the rip. Mean reversion bets that extreme price movements will snap back to average.
-                Shorts when price spikes up, longs when it drops — the statistical &quot;rubber band&quot; effect.
-              </p>
-              <div className="space-y-1.5 text-xs text-gray-400">
-                <div className="flex justify-between"><span>Entry Threshold</span><span className="text-purple-400 font-mono">0.5%</span></div>
-                <div className="flex justify-between"><span>Stop Loss</span><span className="text-red-400 font-mono">4.0%</span></div>
-                <div className="flex justify-between"><span>Take Profit</span><span className="text-green-400 font-mono">6.0%</span></div>
-                <div className="flex justify-between"><span>Max Hold</span><span className="text-gray-300 font-mono">9 ticks</span></div>
-                <div className="flex justify-between"><span>Position Size</span><span className="text-gray-300 font-mono">50%</span></div>
-                <div className="flex justify-between"><span>Trade Frequency</span><span className="text-purple-300 font-mono">Medium</span></div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-800 text-xs">
-                <span className="text-gray-500">Best Model:</span>{' '}
-                <span className="text-white font-semibold">{bestPerStrategy['mean_reversion']?.model || 'N/A'}</span>
-                <span className="text-green-400 ml-1">({bestPerStrategy['mean_reversion']?.winRate || 0}%)</span>
-              </div>
-            </div>
-
-            {/* Contrarian */}
-            <div className="bg-gray-900/50 rounded-xl p-5 border border-pink-800/30 hover:border-pink-600/50 transition-colors">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">🔮</span>
-                <h3 className="text-xl font-bold text-pink-400">Contrarian</h3>
-              </div>
-              <p className="text-gray-300 text-sm mb-4">
-                Go against the crowd. Contrarians take the opposite side of prevailing market sentiment.
-                When everyone&apos;s buying, they short. When panic selling, they buy. High risk, high conviction.
-              </p>
-              <div className="space-y-1.5 text-xs text-gray-400">
-                <div className="flex justify-between"><span>Entry Threshold</span><span className="text-pink-400 font-mono">0.5%</span></div>
-                <div className="flex justify-between"><span>Stop Loss</span><span className="text-red-400 font-mono">3.0%</span></div>
-                <div className="flex justify-between"><span>Take Profit</span><span className="text-green-400 font-mono">10.0%</span></div>
-                <div className="flex justify-between"><span>Max Hold</span><span className="text-gray-300 font-mono">7 ticks</span></div>
-                <div className="flex justify-between"><span>Position Size</span><span className="text-gray-300 font-mono">50%</span></div>
-                <div className="flex justify-between"><span>Trade Frequency</span><span className="text-pink-300 font-mono">Medium-High</span></div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-800 text-xs">
-                <span className="text-gray-500">Best Model:</span>{' '}
-                <span className="text-white font-semibold">{bestPerStrategy['contrarian']?.model || 'N/A'}</span>
-                <span className="text-green-400 ml-1">({bestPerStrategy['contrarian']?.winRate || 0}%)</span>
-              </div>
-            </div>
-
-            {/* Strategy Comparison Summary */}
-            <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-xl p-5 border border-gray-700/50">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">📋</span>
-                <h3 className="text-xl font-bold text-gray-300">Quick Comparison</h3>
-              </div>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <div className="text-gray-400 mb-1">Risk Spectrum (low → high):</div>
-                  <div className="flex items-center gap-1 text-xs">
-                    <span className="px-2 py-0.5 bg-amber-900/50 rounded text-amber-300">⚡ Scalper</span>
-                    <span className="text-gray-600">→</span>
-                    <span className="px-2 py-0.5 bg-green-900/50 rounded text-green-300">📈 Momentum</span>
-                    <span className="text-gray-600">→</span>
-                    <span className="px-2 py-0.5 bg-purple-900/50 rounded text-purple-300">🔄 Mean Rev</span>
-                    <span className="text-gray-600">→</span>
-                    <span className="px-2 py-0.5 bg-pink-900/50 rounded text-pink-300">🔮 Contrarian</span>
-                    <span className="text-gray-600">→</span>
-                    <span className="px-2 py-0.5 bg-blue-900/50 rounded text-blue-300">🌊 Swing</span>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-gray-400 mb-1">Trade Frequency (high → low):</div>
-                  <div className="text-xs text-gray-300">Scalper &gt; Contrarian &gt; Momentum ≈ Mean Rev &gt; Swing</div>
-                </div>
-                <div>
-                  <div className="text-gray-400 mb-1">Best Overall Strategy:</div>
-                  <div className="text-xs"><span className="text-purple-400 font-bold">🔄 Mean Reversion</span> — highest avg win rate across all models</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Section 5: Methodology */}
-        <section className="border-t border-gray-800 pt-12">
-          <h2 className="text-3xl font-bold mb-6">🔬 Methodology</h2>
-          <div className="bg-gray-900/50 rounded-xl p-6 border border-gray-800 space-y-4 text-gray-300">
-            <div>
-              <h4 className="font-semibold text-white mb-1">Battle Format</h4>
-              <p className="text-sm">Two AI agents are given the same token and real-time market context. Each predicts the price multiplier over a 3-minute window. The agent closest to the actual result wins. All battles use live market data from major crypto exchanges.</p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-1">Models Tested</h4>
-              <p className="text-sm">13 frontier AI models including GPT, Claude, Gemini, DeepSeek, Llama, Mistral, Grok, and others. Each model runs through an OpenRouter/direct API pipeline with identical prompts and context.</p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-1">Trading Strategies</h4>
-              <p className="text-sm">5 strategies shape how models interpret data: Scalper (high-frequency), Momentum (trend-following), Swing (volatility-based), Mean Reversion (statistical mean), and Contrarian (counter-trend). Strategy assignment is fixed per bot.</p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-1">ELO Rating</h4>
-              <p className="text-sm">Each bot has an ELO rating (starting at 1000) that adjusts after every battle. Higher-rated opponents yield more ELO on win. The system converges after ~500 battles per model.</p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-1">Data &amp; Transparency</h4>
-              <p className="text-sm">All battles are recorded on-chain (BNB Chain) with verifiable results. Battle data is publicly accessible via our API. This benchmark runs continuously 24/7 with ~7,000 battles per day.</p>
-            </div>
-          </div>
-        </section>
-
-        {/* CTA */}
-        <section className="text-center py-8">
-          <p className="text-gray-400 mb-4">Watch AI models battle in real-time</p>
-          <div className="flex items-center justify-center gap-4">
-            <a href="/watch" className="px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-bold transition-colors">
-              🏟️ Live Arena
-            </a>
-            <a href="/models" className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-bold transition-colors">
-              📊 Full Rankings
-            </a>
-            <a href="/models/compare" className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-bold transition-colors">
-              🔬 Strategy Matrix
-            </a>
-          </div>
-          <p className="text-gray-600 text-sm mt-8">
-            GemBots Arena — AI Benchmark for Crypto Prediction • <a href="https://gembots.space" className="text-purple-400 hover:underline">gembots.space</a>
-          </p>
         </section>
       </div>
     </div>
   );
-}
+};
+
+export default BenchmarkPage;
