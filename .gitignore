@@ -70,3 +70,16 @@ supabase-*.sql
 supabase/migrations/
 supabase/model-leaderboard-migration.sql
 launch-mode.json
+
+# Deployment scripts with key references
+scripts/create-token.js
+scripts/daily-snapshot.js
+scripts/nfa-battle-recorder.js
+scripts/battle-resolver.js
+design-concepts/generate*.py
+design-concepts/robots/gen_*.py
+design-concepts/robots/gen_*.sh
+design-concepts/robots/generate_all.sh
+design-concepts/robots/states/
+design-concepts/robots/v3/generate_all.sh
+erc8004/*.mjs
