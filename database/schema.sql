@@ -86,9 +86,14 @@ INSERT INTO bots (name, hp, wins, losses, win_streak, league, is_npc, avatar_sta
   ('🐋 WhaleWatch', 80, 28, 15, 3, 'gold', true, 'neutral');
 
 -- 7. ENABLE REALTIME
-ALTER PUBLICATION supabase_realtime ADD TABLE bots;
-ALTER PUBLICATION supabase_realtime ADD TABLE rooms;
-ALTER PUBLICATION supabase_realtime ADD TABLE battles;
+-- Supabase Realtime (only works with full Supabase, skip in plain PostgreSQL)
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE bots;
+  ALTER PUBLICATION supabase_realtime ADD TABLE rooms;
+  ALTER PUBLICATION supabase_realtime ADD TABLE battles;
+EXCEPTION WHEN undefined_object THEN
+  RAISE NOTICE 'supabase_realtime publication not found, skipping';
+END $$;
 
 -- 8. ROW LEVEL SECURITY (basic - allow all for now)
 ALTER TABLE bots ENABLE ROW LEVEL SECURITY;
