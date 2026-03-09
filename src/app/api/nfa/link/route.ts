@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { ethers } from 'ethers';
 import { rateLimit, getClientIP } from '@/lib/rate-limit';
 
-const NFA_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_BSC_NFA_CONTRACT_ADDRESS || '0xC7aBa7FD2D065F1231b12797AC27ccD2cA0a5956';
+const NFA_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_BSC_NFA_CONTRACT_ADDRESS || '0x9bC5f392cE8C7aA13BD5bC7D5A1A12A4DD58b3D5';
 const BSC_RPC_URL = 'https://bsc-dataseed1.binance.org';
 const NFA_STRATEGY_ABI = [
   'function botStrategy(uint256 tokenId) view returns (string)',

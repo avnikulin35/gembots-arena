@@ -76,8 +76,19 @@ export async function GET() {
     // Also get supabase battles count for comparison
     const supabaseBattles = await supaCount('battles', 'status=eq.resolved');
     
-    // Use the higher number (bots table includes perpetual tournament battles)
-    const totalBattles = Math.max(totalFromBots, supabaseBattles);
+    // Count Trading League battles (new P&L-based system)
+    let tradingLeagueBattles = 0;
+    try {
+      const Database = require('better-sqlite3');
+      const sqliteDb = new Database(path.join(process.cwd(), 'data', 'gembots.db'));
+      const row = sqliteDb.prepare("SELECT COUNT(*) as cnt FROM trading_battles").get() as any;
+      tradingLeagueBattles = row?.cnt || 0;
+      sqliteDb.close();
+    } catch {}
+
+    // Use the higher number (bots table includes perpetual tournament battles) + Trading League
+    const classicBattles = Math.max(totalFromBots, supabaseBattles);
+    const totalBattles = classicBattles + tradingLeagueBattles;
 
     // Total bots
     const totalBots = await supaCount('bots');
@@ -86,7 +97,7 @@ export async function GET() {
     // Top 3 bots by ELO
     const { data: topBots } = await supabase
       .from('bots')
-      .select('id, name, elo, wins, losses, league, win_streak, peak_elo, ai_model, model_id')
+      .select('id, name, elo, wins, losses, league, win_streak, peak_elo, model_id')
       .order('elo', { ascending: false })
       .limit(3);
 
@@ -158,8 +169,23 @@ export async function GET() {
       }
     } catch {}
 
+    // Trading League leaderboard (top 3)
+    let tradingLeagueTop: any[] = [];
+    try {
+      const Database = require('better-sqlite3');
+      const sqliteDb = new Database(path.join(process.cwd(), 'data', 'gembots.db'));
+      tradingLeagueTop = sqliteDb.prepare(`
+        SELECT te.*, ab.name FROM trading_elo te
+        JOIN api_bots ab ON ab.id = te.bot_id
+        ORDER BY te.elo DESC LIMIT 3
+      `).all();
+      sqliteDb.close();
+    } catch {}
+
     return NextResponse.json({
       totalBattles,
+      classicBattles,
+      tradingLeagueBattles,
       totalBots,
       activeBots,
       totalTournaments,
@@ -174,9 +200,13 @@ export async function GET() {
         league: b.league || 'bronze',
         winStreak: b.win_streak || 0,
         peakElo: b.peak_elo || 1000,
-        aiModel: b.model_id ? getModelDisplayName(b.model_id) : (b.ai_model || null),
+        aiModel: b.model_id ? getModelDisplayName(b.model_id) : null,
       })),
       recentBattles: enrichedBattles,
+      tradingLeague: {
+        totalBattles: tradingLeagueBattles,
+        topBots: tradingLeagueTop,
+      },
     });
   } catch (e: any) {
     console.error('Stats API error:', e);

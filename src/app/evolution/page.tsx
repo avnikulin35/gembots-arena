@@ -100,7 +100,7 @@ export default function EvolutionPage() {
             <div className="mb-12 p-6 rounded-2xl border border-gray-800 bg-gray-900/50">
               <h2 className="text-xl font-bold text-white mb-4">🔬 How It Works</h2>
               <div className="grid sm:grid-cols-3 gap-6">
-                <StepCard step={1} title="Analyze" desc="Every 3 hours, scan all recent battles. Rank bots by win rate and prediction accuracy." />
+                <StepCard step={1} title="Analyze" desc="Every 3 hours, scan all recent battles. Rank bots by win rate and P&L performance." />
                 <StepCard step={2} title="Mutate" desc="Bottom 20% bots mutate — borrowing trading styles, strategies, and configs from top 20% champions." />
                 <StepCard step={3} title="Optimize" desc="Model-Strategy Matrix identifies each AI model's best trading style. Reassign mismatched bots for maximum performance." />
               </div>
@@ -211,8 +211,7 @@ export default function EvolutionPage() {
                   Traditional trading bots are static — configured once and left to run. GemBots are <strong className="text-white">alive</strong>.
                 </p>
                 <p>
-                  Every 3 hours, our Auto-Evolution Engine analyzes thousands of battles, identifies which AI model + strategy combinations
-                  produce the highest win rates, and <strong className="text-white">automatically mutates</strong> underperforming bots
+                  Every 3 hours, our Auto-Evolution Engine analyzes thousands of battles, identifies which AI model + trading style combinations produce the highest P&L and win rates, and <strong className="text-white">automatically mutates</strong> underperforming bots
                   to adopt winning traits.
                 </p>
                 <p>

@@ -74,7 +74,7 @@ export default function WhitepaperPage() {
             GemBots is an <strong className="text-green-400">open-source</strong> platform where AI agents are first-class on-chain assets. We believe the future of DeFi isn&apos;t humans manually trading — it&apos;s autonomous AI agents competing, evolving, and generating alpha 24/7.
           </p>
           <p className="leading-relaxed mb-4">
-            Our mission: <strong className="text-white">objectively determine which AI models can truly predict markets — through transparent, on-chain competition.</strong> Not marketing, not paper benchmarks — real battles with real prices. GemBots is the arena of truth for AI trading.
+            Our mission: <strong className="text-white">objectively determine which AI models can truly trade markets — through transparent, on-chain competition.</strong> Not marketing, not paper benchmarks — real battles with real prices. GemBots is the arena of truth for AI trading.
           </p>
           <p className="leading-relaxed mb-4">
             Each agent is a <strong className="text-white">Non-Fungible Agent (NFA)</strong> — a BAP-578 token on BNB Chain that carries an embedded trading strategy, battle history, and evolution tier. NFAs can be bought, sold, and traded on our marketplace, creating a new asset class: <em>proven AI intelligence</em>.
@@ -230,16 +230,16 @@ export default function WhitepaperPage() {
         <section id="battle-system" className="mb-16">
           <h2 className="text-2xl font-black text-[#F0B90B] mb-4 pb-2 border-b border-[#F0B90B]/20">6. Battle System</h2>
           <p className="leading-relaxed mb-4">
-            The Arena is a 24/7 perpetual tournament where AI agents compete in real-time crypto price prediction battles.
+            The Arena is a 24/7 24/7 Trading League where AI agents compete in real-time crypto trading battles.
           </p>
 
           <h3 className="text-lg font-bold text-white mt-6 mb-3">Battle Mechanics</h3>
           <ul className="list-none space-y-2 mb-6">
             {[
-              'Each battle features two agents predicting the price movement of a live crypto token',
-              '14 frontier AI models (GPT-4, Claude, Gemini, DeepSeek, Llama, etc.) participate alongside user NFAs',
-              'Correct predictions deal damage to the opponent; wrong predictions cost HP',
-              'Battles resolve based on real market data — no randomness, pure skill',
+              'Each battle features two AI agents making trading decisions (BUY/SELL) on a live crypto pair of a live crypto token',
+              '15+ frontier AI models (GPT-4, Claude, Gemini, DeepSeek, Llama, etc.) participate alongside user NFAs',
+              'Each bot chooses BUY or SELL with leverage (1-10x). After 15 minutes, P&L is calculated from real market data. The bot with better P&L wins and deals damage',
+              'Battles resolve based on real P&L — no randomness, pure trading skill',
               'Users can mint and trade AI agents (NFAs) on BNB Chain',
             ].map((item, i) => (
               <li key={i} className="pl-6 relative before:content-['▸'] before:absolute before:left-1 before:text-[#F0B90B]">{item}</li>
@@ -288,7 +288,7 @@ export default function WhitepaperPage() {
                 phase: 'Phase 1',
                 status: '✅ Complete',
                 title: 'Arena + Strategy Builder',
-                items: ['AI Battle Arena with 50+ frontier models', 'Real-time crypto prediction battles', 'Visual Strategy Builder', 'Leaderboard & Stats tracking', 'NFA marketplace smart contract'],
+                items: ['AI Trading League with 15+ frontier models', 'Real-time crypto trading battles (BUY/SELL with leverage, P&L scoring)', 'Visual Strategy Builder', 'Leaderboard & Stats tracking', 'NFA marketplace smart contract'],
               },
               {
                 phase: 'Phase 2',

@@ -16,7 +16,7 @@ import LearningABI from '@/contracts/GemBotsLearning.json';
 
 export const NFA_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_BSC_NFA_CONTRACT_ADDRESS 
   || process.env.NEXT_PUBLIC_BSC_CONTRACT_ADDRESS 
-  || '0xC7aBa7FD2D065F1231b12797AC27ccD2cA0a5956';
+  || '0x9bC5f392cE8C7aA13BD5bC7D5A1A12A4DD58b3D5';
 export const LEARNING_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_BSC_LEARNING_CONTRACT_ADDRESS || '';
 export const BSC_CHAIN_ID = 56;
 export const BSC_RPC_URL = process.env.NEXT_PUBLIC_BSC_RPC || 'https://bsc-dataseed.binance.org/';

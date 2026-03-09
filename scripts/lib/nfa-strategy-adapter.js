@@ -21,7 +21,7 @@ const { ethers } = require('ethers');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const NFA_CONTRACT_ADDRESS = '0x2F912A2B05a43CAE416536009d9b01Be0a3Ee0F9';
+const NFA_CONTRACT_ADDRESS = '0x9bC5f392cE8C7aA13BD5bC7D5A1A12A4DD58b3D5'; // v5
 const NFA_FAILURE_THRESHOLD = 3; // NFA fails N times consecutively -> blacklist
 const NFA_BLACKLIST_TTL_MS = 60 * 60 * 1000; // Blacklist duration for NFA (1 hour)
 const BLACKLISTED_NFA_IDS_INITIAL = new Set([31]); // NFA #31 is known to be problematic

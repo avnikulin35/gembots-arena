@@ -36,7 +36,7 @@ const TIERS = [
     modelNames: ['Llama 3.1 8B', 'Mistral 7B'],
     byok: false,
     description: 'Free AI models. Perfect for getting started.',
-    features: ['Free AI models', 'Auto-matched battles', 'Basic stats'],
+    features: ['Free AI models', 'Trading League battles', 'P&L tracking'],
     color: '#CD7F32',
     glowColor: 'rgba(205,127,50,0.35)',
     gradient: 'from-amber-900/30 to-yellow-900/20',

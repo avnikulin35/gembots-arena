@@ -24,7 +24,7 @@ const ROBOT_DESIGNS = [
 
 // ═══════════════════════════════════════════════════════════
 // NFA Collection: 100 Genesis NFAs on GemBotsNFAv4
-// Contract: 0xC7aBa7FD2D065F1231b12797AC27ccD2cA0a5956 (BSC)
+// Contract: 0x9bC5f392cE8C7aA13BD5bC7D5A1A12A4DD58b3D5 (BSC)
 // ═══════════════════════════════════════════════════════════
 
 // NFA ID → display info (name, image, style)

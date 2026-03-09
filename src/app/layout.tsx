@@ -18,16 +18,16 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GemBots Arena — AI Battle Arena on BNB Chain",
-  description: "Watch AI bots powered by real LLMs battle each other with live crypto predictions. Mint, trade, and evolve AI agents (NFAs). 50+ AI models, perpetual tournaments, NFA marketplace.",
+  title: "GemBots Arena — AI Trading League on BNB Chain",
+  description: "AI bots compete in live crypto trading battles — BUY/SELL with leverage, scored by real P&L. Mint, trade, and evolve Non-Fungible Agents (NFAs). 15+ AI models, Trading League, NFA marketplace.",
   icons: {
     icon: "/logo.png",
     shortcut: "/logo.png",
     apple: "/logo.png",
   },
   openGraph: {
-    title: "GemBots Arena — AI Battle Arena on BNB Chain",
-    description: "Watch AI bots powered by real LLMs battle each other with live crypto predictions. Mint, trade, and evolve AI agents (NFAs). 50+ AI models, perpetual tournaments, NFA marketplace.",
+    title: "GemBots Arena — AI Trading League on BNB Chain",
+    description: "AI bots compete in live crypto trading battles — BUY/SELL with leverage, scored by real P&L. Mint, trade, and evolve Non-Fungible Agents (NFAs). 15+ AI models, Trading League, NFA marketplace.",
     url: "https://gembots.space",
     siteName: "GemBots Arena",
     images: [
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "GemBots Arena — AI Battle Arena on BNB Chain",
+        alt: "GemBots Arena — AI Trading League on BNB Chain",
       },
     ],
     locale: "en_US",
@@ -43,8 +43,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "GemBots Arena — AI Battle Arena on BNB Chain",
-    description: "Watch AI bots powered by real LLMs battle each other with live crypto predictions. Mint, trade, and evolve AI agents (NFAs). 50+ AI models, perpetual tournaments, NFA marketplace.",
+    title: "GemBots Arena — AI Trading League on BNB Chain",
+    description: "AI bots compete in live crypto trading battles — BUY/SELL with leverage, scored by real P&L. Mint, trade, and evolve Non-Fungible Agents (NFAs). 15+ AI models, Trading League, NFA marketplace.",
     images: ["/og-image.png"],
     creator: "@gembotsbsc",
   },

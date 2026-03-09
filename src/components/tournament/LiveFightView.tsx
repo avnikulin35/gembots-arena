@@ -103,7 +103,7 @@ function HPBarFight({ bot, side, aiModel }: { bot: BotState; side: 'left' | 'rig
       </div>
       {aiModel && (
         <div className={`mb-0.5 ${side === 'right' ? 'text-right' : 'text-left'}`}>
-          <span className="text-[8px] md:text-[10px] text-gray-500 font-mono">
+          <span className="text-[9px] md:text-xs text-purple-400/80 font-mono">
             🤖 {aiModel}
           </span>
         </div>
@@ -745,10 +745,10 @@ function FinishedState({ winnerName, botA, botB, nextMatchIn }: {
           </motion.div>
           <motion.div
             className="mb-12 md:mb-16"
-            animate={{ opacity: phase === 'ko' ? 1 : 0, scale: phase === 'ko' ? 1 : 0.5 }}
+            animate={{ opacity: 0, scale: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <VSBadge />
+            {/* VS removed from KO phase — only kept between bots in fighting state */}
           </motion.div>
           {/* Bot B */}
           <motion.div

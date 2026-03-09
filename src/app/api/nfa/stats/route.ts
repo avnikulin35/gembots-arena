@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ethers } from 'ethers';
 
-const NFA_CONTRACT = process.env.NEXT_PUBLIC_BSC_NFA_CONTRACT_ADDRESS || '0xC7aBa7FD2D065F1231b12797AC27ccD2cA0a5956';
+const NFA_CONTRACT = process.env.NEXT_PUBLIC_BSC_NFA_CONTRACT_ADDRESS || '0x9bC5f392cE8C7aA13BD5bC7D5A1A12A4DD58b3D5';
 const BSC_RPC = process.env.NEXT_PUBLIC_BSC_RPC || 'https://bsc-dataseed.binance.org/';
 
 const ABI = [

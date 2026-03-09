@@ -264,7 +264,7 @@ function StrategyBuilder() {
       <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
         <h3 className="text-lg font-semibold text-white mb-2">Describe your strategy</h3>
         <p className="text-gray-400 text-sm mb-4">
-          Tell the AI what you want your trading strategy to do — in plain English. It will generate a Solidity smart contract and auto-audit it for security.
+          Describe your trading approach in plain English. The AI Forge creates a strategy profile that guides your bot's decisions in the Trading League — when to buy, sell, and at what leverage.
         </p>
         <textarea
           value={description}

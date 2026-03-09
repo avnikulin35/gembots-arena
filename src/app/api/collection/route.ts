@@ -11,7 +11,7 @@ function getSupabase() {
   );
 }
 
-const NFA_CONTRACT = process.env.NEXT_PUBLIC_BSC_NFA_CONTRACT_ADDRESS || '0xC7aBa7FD2D065F1231b12797AC27ccD2cA0a5956';
+const NFA_CONTRACT = process.env.NEXT_PUBLIC_BSC_NFA_CONTRACT_ADDRESS || '0x9bC5f392cE8C7aA13BD5bC7D5A1A12A4DD58b3D5';
 
 // Genesis NFAs that aren't in the bots table
 const GENESIS_NFAS = [
@@ -54,7 +54,7 @@ export async function GET() {
     // Fetch bots with NFA IDs
     const { data: bots, error } = await supabase
       .from('bots')
-      .select('id, name, strategy, nfa_id, evm_address, wins, losses, total_battles, elo, ai_model, model_id, trading_style, league, special, is_genesis, marketplace_price')
+      .select('id, name, strategy, nfa_id, evm_address, wins, losses, total_battles, elo, model_id, league')
       .not('nfa_id', 'is', null)
       .order('nfa_id', { ascending: true });
 
@@ -144,8 +144,8 @@ export async function GET() {
         name: bot.name || 'Unknown Bot',
         nfaId: bot.nfa_id,
         strategy: bot.strategy || 'unknown',
-        tradingStyle: bot.trading_style || 'unknown',
-        aiModel: bot.model_id ? getModelDisplayName(bot.model_id) : (bot.ai_model || 'Unknown'),
+        tradingStyle: 'unknown',
+        aiModel: bot.model_id ? getModelDisplayName(bot.model_id) : 'Unknown',
         evmAddress: bot.evm_address || '',
         wins: bot.wins || 0,
         losses: bot.losses || 0,
@@ -153,9 +153,9 @@ export async function GET() {
         winRate,
         elo: bot.elo || 1000,
         league: bot.league || 'bronze',
-        special: bot.special || null as string | null,
-        isGenesis: bot.is_genesis || false,
-        marketplacePrice: bot.marketplace_price || null as number | null,
+        special: null as string | null,
+        isGenesis: false,
+        marketplacePrice: null as number | null,
         bscscanUrl: `https://bscscan.com/token/${NFA_CONTRACT}?a=${bot.nfa_id}`,
         // Trading League data
         totalPnlUsd: tradingStats?.total_pnl_usd ?? null,

@@ -7,9 +7,8 @@ import { useEVMWallet } from '@/providers/EVMWalletProvider';
 
 const NAV_LINKS: { href: string; label: string; badge?: string }[] = [
   { href: '/watch', label: '⚔️ Arena' },
+  { href: '/leaderboard', label: '🏆 Leaderboard' },
   { href: '/collection', label: '🤖 NFAs' },
-  { href: '/benchmark', label: '📊 Benchmark' },
-  { href: '/trading', label: '💰 Trading' },
   { href: '/whitepaper', label: '📄 Whitepaper' },
   { href: '/forge', label: '🔮 AI Forge' },
 ];

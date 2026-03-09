@@ -5,7 +5,7 @@
  * Collects battles from Supabase and records them on-chain in batches.
  * Designed to run manually or via cron every 2-3 days (NOT continuous polling).
  * 
- * Contract: 0x2F912A2B05a43CAE416536009d9b01Be0a3Ee0F9 (BSC Mainnet)
+ * Contract: 0x9bC5f392cE8C7aA13BD5bC7D5A1A12A4DD58b3D5 (BSC Mainnet)
  * 
  * Usage:
  *   node scripts/nfa-battle-recorder.js                    # Record all unrecorded battles
@@ -54,7 +54,7 @@ if (fs.existsSync(bscEnvPath)) {
 // ============================================================================
 
 const BSC_RPC_URL = process.env.BSC_RPC_URL || 'https://bsc-dataseed.binance.org/';
-const NFA_CONTRACT_ADDRESS = '0x2F912A2B05a43CAE416536009d9b01Be0a3Ee0F9';
+const NFA_CONTRACT_ADDRESS = '0x9bC5f392cE8C7aA13BD5bC7D5A1A12A4DD58b3D5';
 const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
