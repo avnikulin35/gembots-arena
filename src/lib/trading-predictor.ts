@@ -28,7 +28,10 @@ Rules:
 - leverage: 1 to 20
 - take_profit/stop_loss: percentage of price move (e.g. 0.5 = 0.5%)
 - HOLD means no position (safe but no profit)
-- Be strategic: sometimes HOLD is the best move`;
+- BUY = long (profit when price goes UP)
+- SELL = short (profit when price goes DOWN)
+- Be strategic: sometimes HOLD is the best move
+- IMPORTANT: Consider SELL (short) equally with BUY. In a bearish/falling market, SELL is the profitable move. Don't default to BUY — analyze the data objectively.`;
 
 export async function getTradingDecision(model: string, snapshot: MarketSnapshot): Promise<TradingDecision> {
   if (!OPENROUTER_API_KEY) {
