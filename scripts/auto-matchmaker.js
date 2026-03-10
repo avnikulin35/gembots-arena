@@ -346,6 +346,60 @@ Respond ONLY with valid JSON: {"prediction": <number>, "reasoning": "<brief>", "
 const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
 const OLLAMA_TIMEOUT_MS = 180000; // 180s — local models need time for cold start + inference
 
+/**
+ * Parse prediction multiplier from Ollama text response.
+ * Tries multiple formats: Nx, bare decimal, "up/down by N%".
+ * Returns null if no valid prediction found.
+ */
+function parseOllamaPrediction(text) {
+  // 1. Standard format: "1.0123x" or "Prediction: 0.9963x"
+  const xMatch = text.match(/(\d+\.\d+)x/i);
+  if (xMatch) return Number(xMatch[1]);
+
+  // 2. "down by N%" → 1 - N/100
+  const downMatch = text.match(/down\s+by\s+(\d+(?:\.\d+)?)%/i);
+  if (downMatch) return 1 - Number(downMatch[1]) / 100;
+
+  // 3. "up by N%" → 1 + N/100
+  const upMatch = text.match(/up\s+by\s+(\d+(?:\.\d+)?)%/i);
+  if (upMatch) return 1 + Number(upMatch[1]) / 100;
+
+  // 4. Skip if it looks like an absolute price target (not a multiplier)
+  const targetMatch = text.match(/target:?\s*\$?(\d+\.?\d*)/i);
+  if (targetMatch && Number(targetMatch[1]) > 10) {
+    // Likely an absolute price, not a multiplier — skip
+  } else if (targetMatch) {
+    return Number(targetMatch[1]);
+  }
+
+  // 5. Bare decimal number (0.80 - 2.00 range = likely a multiplier)
+  const bareMatch = text.match(/\b(\d+\.\d+)\b/);
+  if (bareMatch) {
+    const val = Number(bareMatch[1]);
+    if (val >= 0.1 && val <= 10.0) return val;
+  }
+
+  return null;
+}
+
+/**
+ * Parse confidence from Ollama text response.
+ * Returns 0-100 integer.
+ */
+function parseOllamaConfidence(text) {
+  // Numeric: "Confidence: 75%" or "confidence: 85"
+  const numMatch = text.match(/[Cc]onfidence:?\s*(\d+)\s*%?/i);
+  if (numMatch) return Math.max(0, Math.min(100, Number(numMatch[1])));
+
+  // Word-based confidence
+  if (/\b(high\s+confidence|confidence:?\s*high|very\s+confident)\b/i.test(text)) return 80;
+  if (/\b(moderate|medium|confidence:?\s*medium)\b/i.test(text)) return 60;
+  if (/\b(low\s+confidence|confidence:?\s*low|not\s+confident)\b/i.test(text)) return 30;
+
+  // Default: 50% (not 30%)
+  return 50;
+}
+
 async function getOllamaPrediction(botName, ollamaModel, token, durationMinutes) {
   const startTime = Date.now();
   const controller = new AbortController();
@@ -388,13 +442,38 @@ async function getOllamaPrediction(botName, ollamaModel, token, durationMinutes)
       prediction = clamp(Number(parsed.prediction) || 1.0, 0.1, 100.0);
       confidence = Math.max(0, Math.min(100, Number(parsed.confidence) || 50));
     } else {
-      // Fallback: parse fine-tuned model text format "Prediction: 0.9963x" or "1.0123x"
-      const predMatch = content.match(/(\d+\.\d+)x/);
-      if (!predMatch) throw new Error(`No JSON in Ollama response: ${content.slice(0, 100)}`);
-      prediction = clamp(Number(predMatch[1]), 0.1, 100.0);
-      // Derive confidence from keywords
-      const confMatch = content.match(/[Cc]onfidence:\s*(high|medium|low|\d+)/i);
-      confidence = confMatch ? (confMatch[1] === 'high' ? 80 : confMatch[1] === 'medium' ? 50 : confMatch[1] === 'low' ? 30 : Number(confMatch[1]) || 50) : 50;
+      // Fallback: parse fine-tuned model text format with multiple strategies
+      prediction = parseOllamaPrediction(content);
+      if (prediction === null) {
+        // Retry with simplified prompt
+        console.warn('⚠️ Parse failed for NemoTrader:', content.substring(0, 100));
+        try {
+          const retryResp = await fetch(`${OLLAMA_HOST}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: ollamaModel,
+              messages: [
+                { role: 'system', content: 'You are a crypto market prediction bot. Always respond with valid JSON only. No markdown formatting.' },
+                { role: 'user', content: buildLLMPrompt(botName, token, durationMinutes) },
+                { role: 'assistant', content },
+                { role: 'user', content: 'Reply with ONLY a number like 0.95 or 1.05:' },
+              ],
+              stream: false,
+              keep_alive: '30m',
+              options: { temperature: 0.3, num_predict: 20 },
+            }),
+          });
+          if (retryResp.ok) {
+            const retryData = await retryResp.json();
+            const retryContent = (retryData.message?.content || '').trim();
+            prediction = parseOllamaPrediction(retryContent);
+          }
+        } catch (_) { /* retry failed, will throw below */ }
+        if (prediction === null) throw new Error(`No parseable prediction in Ollama response: ${content.slice(0, 100)}`);
+      }
+      prediction = clamp(prediction, 0.1, 100.0);
+      confidence = parseOllamaConfidence(content);
     }
 
     console.log(`  🏠 Ollama [${botName}] ${ollamaModel} → ${prediction}x (conf: ${confidence}%, ${latencyMs}ms)`);
