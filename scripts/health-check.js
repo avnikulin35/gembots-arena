@@ -20,7 +20,7 @@ async function main() {
   } catch(e) { issues.push('🔴 PM2 check failed: ' + e.message); }
 
   // 2. Database checks via psql
-  const PGCMD = 'PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -t -c';
+  const PGCMD = 'PGPASSWORD=${PGPASSWORD:-postgres} psql -h 127.0.0.1 -p 54322 -U postgres -t -c';
   
   // Dead bots
   const deadBots = parseInt(execSync(`${PGCMD} "SELECT COUNT(*) FROM bots WHERE is_npc=true AND hp=0;"`).toString().trim());
