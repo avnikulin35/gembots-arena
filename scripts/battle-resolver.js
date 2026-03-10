@@ -521,12 +521,62 @@ async function checkAndResolveBattles() {
   }
 }
 
+// ============================================
+// AUTO-RESPAWN DEAD BOTS
+// ============================================
+
+async function autoRespawnBots() {
+  try {
+    // Find NPC bots with hp=0 whose last battle finished > 30 minutes ago
+    const deadBots = await supabaseRequest(
+      `bots?is_npc=eq.true&hp=eq.0&select=id,name`
+    );
+    
+    if (!deadBots || deadBots.length === 0) return;
+    
+    let respawnCount = 0;
+    for (const bot of deadBots) {
+      // Check last battle time
+      const lastBattles = await supabaseRequest(
+        `battles?or=(bot1_id.eq.${bot.id},bot2_id.eq.${bot.id})&order=created_at.desc&limit=1&select=created_at`
+      );
+      
+      const lastBattleTime = lastBattles?.[0]?.created_at;
+      if (!lastBattleTime) {
+        // No battles at all — respawn
+      } else {
+        const deadMinutes = (Date.now() - new Date(lastBattleTime).getTime()) / 60000;
+        if (deadMinutes < 30) continue; // Too recent, skip
+        
+        console.log(`🔄 Auto-respawned: ${bot.name} (was dead for ${Math.round(deadMinutes)}m)`);
+      }
+      
+      await supabaseRequest(`bots?id=eq.${bot.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ hp: 100 }),
+        prefer: 'return=minimal',
+      });
+      respawnCount++;
+    }
+    
+    if (respawnCount > 0) {
+      console.log(`🔄 Auto-respawn complete: ${respawnCount} bots revived`);
+    }
+  } catch (e) {
+    console.error('Auto-respawn error:', e.message);
+  }
+}
+
 async function main() {
   console.log('🤖 GemBots Battle Resolver v2 (with ELO) started');
   console.log(`   Checking every ${RESOLVE_INTERVAL / 1000}s\n`);
   
   await checkAndResolveBattles();
   setInterval(checkAndResolveBattles, RESOLVE_INTERVAL);
+  
+  // Auto-respawn dead bots every 15 minutes
+  setInterval(autoRespawnBots, 15 * 60 * 1000);
+  console.log('🔄 Auto-respawn enabled (every 15 minutes)');
 }
 
 main().catch(console.error);
