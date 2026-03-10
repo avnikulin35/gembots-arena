@@ -120,8 +120,43 @@ export async function GET() {
     `);
     const worstTrade = (worstTradeQuery.get() as { worst_pnl: number | null }).worst_pnl || 0;
 
-    const modelsCountQuery = db.prepare(`SELECT COUNT(DISTINCT strategy) as count FROM api_bots;`);
+    const modelsCountQuery = db.prepare(`
+      SELECT COUNT(DISTINCT model) as count FROM (
+        SELECT bot1_model as model FROM trading_battles WHERE bot1_model IS NOT NULL
+        UNION
+        SELECT bot2_model FROM trading_battles WHERE bot2_model IS NOT NULL
+      );
+    `);
     const modelsCount = (modelsCountQuery.get() as { count: number }).count;
+
+    // Model Leaderboard: aggregate stats per AI model
+    const modelLeaderboardQuery = db.prepare(`
+      SELECT
+        model,
+        COUNT(*) as battles,
+        SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) as wins,
+        SUM(CASE WHEN won=0 AND draw=0 THEN 1 ELSE 0 END) as losses,
+        SUM(CASE WHEN draw=1 THEN 1 ELSE 0 END) as draws,
+        ROUND(100.0 * SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) / COUNT(*), 1) as win_rate,
+        ROUND(AVG(pnl), 4) as avg_pnl,
+        ROUND(SUM(pnl), 2) as total_pnl,
+        ROUND(MAX(pnl), 2) as best_trade,
+        ROUND(MIN(pnl), 2) as worst_trade
+      FROM (
+        SELECT bot1_model as model, bot1_pnl as pnl,
+          CASE WHEN winner_id=bot1_id THEN 1 ELSE 0 END as won,
+          CASE WHEN winner_id IS NULL THEN 1 ELSE 0 END as draw
+        FROM trading_battles WHERE status='resolved' AND bot1_model IS NOT NULL
+        UNION ALL
+        SELECT bot2_model as model, bot2_pnl as pnl,
+          CASE WHEN winner_id=bot2_id THEN 1 ELSE 0 END as won,
+          CASE WHEN winner_id IS NULL THEN 1 ELSE 0 END as draw
+        FROM trading_battles WHERE status='resolved' AND bot2_model IS NOT NULL
+      ) t
+      GROUP BY model
+      ORDER BY win_rate DESC, total_pnl DESC;
+    `);
+    const modelLeaderboard = modelLeaderboardQuery.all();
 
     const stats = {
       totalBattles,
@@ -133,6 +168,7 @@ export async function GET() {
 
     return NextResponse.json({
       leaderboard,
+      modelLeaderboard,
       recentBattles,
       activeBattles,
       stats,

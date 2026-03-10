@@ -14,8 +14,22 @@ interface TradingEloData {
   name: string;
 }
 
+interface ModelStats {
+  model: string;
+  battles: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  win_rate: number;
+  avg_pnl: number;
+  total_pnl: number;
+  best_trade: number;
+  worst_trade: number;
+}
+
 interface TradingLeagueData {
   leaderboard: TradingEloData[];
+  modelLeaderboard: ModelStats[];
   recentBattles: any[];
   activeBattles: any[];
   stats: {
@@ -153,8 +167,71 @@ function TradingLeagueTab({ data }: { data: TradingLeagueData | null }) {
         <StatBox label="Models" value={data.stats.modelsCount.toString()} />
       </div>
 
-      {/* Leaderboard table */}
+      {/* Model Leaderboard */}
+      {data.modelLeaderboard?.length > 0 && (
+        <div className="bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden mb-8">
+          <div className="px-4 py-3 border-b border-gray-800">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              🤖 AI Model Rankings
+              <span className="text-xs font-normal text-gray-500">Which model predicts best?</span>
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-800 text-xs text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-left">#</th>
+                  <th className="px-4 py-3 text-left">Model</th>
+                  <th className="px-4 py-3 text-right">Battles</th>
+                  <th className="px-4 py-3 text-right">Win Rate</th>
+                  <th className="px-4 py-3 text-right">Avg P&L</th>
+                  <th className="px-4 py-3 text-right">Total P&L</th>
+                  <th className="px-4 py-3 text-right">Best</th>
+                  <th className="px-4 py-3 text-right">Worst</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.modelLeaderboard.map((m, i) => {
+                  const shortName = m.model.split('/').pop() || m.model;
+                  return (
+                    <tr key={m.model} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                      <td className="px-4 py-4 text-lg">
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className="font-bold text-white">{shortName}</span>
+                        <span className="text-xs text-gray-600 ml-2">{m.model.split('/')[0]}</span>
+                      </td>
+                      <td className="px-4 py-4 text-right text-gray-400">{m.battles}</td>
+                      <td className={`px-4 py-4 text-right font-bold ${m.win_rate >= 50 ? 'text-green-400' : m.win_rate >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+                        {m.win_rate.toFixed(1)}%
+                      </td>
+                      <td className={`px-4 py-4 text-right font-mono ${m.avg_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {m.avg_pnl >= 0 ? '+' : ''}{m.avg_pnl.toFixed(3)}%
+                      </td>
+                      <td className={`px-4 py-4 text-right font-mono font-bold ${m.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {m.total_pnl >= 0 ? '+' : ''}{m.total_pnl.toFixed(2)}%
+                      </td>
+                      <td className="px-4 py-4 text-right font-mono text-green-400/70">
+                        +{m.best_trade.toFixed(2)}%
+                      </td>
+                      <td className="px-4 py-4 text-right font-mono text-red-400/70">
+                        {m.worst_trade.toFixed(2)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Bot Leaderboard table */}
       <div className="bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-800">
+          <h3 className="text-lg font-bold text-white">🏆 Bot Rankings</h3>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
