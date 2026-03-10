@@ -48,10 +48,15 @@ interface NFAFromAPI {
 
 interface ArenaBot {
   id: number;
+  nfa_id?: number | null;
   name: string;
   wins: number;
   losses: number;
+  draws?: number;
   total_battles: number;
+  total_pnl?: number;
+  best_trade?: number;
+  worst_trade?: number;
   elo: number;
   league: string;
   special: string | null;
@@ -112,7 +117,10 @@ export default function CollectionPage() {
       const arenaData = await arenaRes.json();
       if (arenaData.bots) {
         const map: Record<number, ArenaBot> = {};
-        arenaData.bots.forEach((b: ArenaBot) => { map[b.id] = b; });
+        arenaData.bots.forEach((b: ArenaBot) => {
+          const key = b.nfa_id ?? b.id;
+          map[key] = b;
+        });
         setArenaStats(map);
       }
     } catch { /* arena stats optional */ }
