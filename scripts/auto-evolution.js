@@ -139,11 +139,12 @@ async function getPerformance(hoursBack) {
 async function getBots() {
   const { data: bots, error } = await supabase
     .from('bots')
-    .select('id, name, strategy, model_id, elo, is_npc, trading_config, strategy_cache')
+    .select('id, name, strategy, model_id, elo, is_npc, trading_config, strategy_cache, hp')
     .eq('is_npc', true); // Only evolve NPC (host) bots
 
   if (error) throw new Error(`Failed to fetch bots: ${error.message}`);
-  return bots || [];
+  // Exclude dead bots (hp=0) from evolution — they're retired/deployed elsewhere
+  return (bots || []).filter(b => b.hp === null || b.hp > 0);
 }
 
 /**
