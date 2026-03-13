@@ -25,69 +25,6 @@ export function useArenaWebSocket() {
   const socketRef = useRef<Socket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
 
-  const connect = useCallback(() => {
-    if (socketRef.current?.connected) return;
-
-    const socket = io({
-      path: '/api/arena/socket',
-      transports: ['websocket', 'polling'],
-    });
-
-    socket.on('connect', () => {
-      console.log('Connected to Arena WebSocket');
-      setState(prev => ({ ...prev, isConnected: true }));
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Disconnected from Arena WebSocket');
-      setState(prev => ({ ...prev, isConnected: false }));
-    });
-
-    socket.on('connected', (data) => {
-      console.log('Arena WebSocket initialized:', data);
-    });
-
-    socket.on('arena_event', (event: LiveEvent) => {
-      handleArenaEvent(event);
-    });
-
-    socket.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error);
-      
-      // Попробуем переподключиться через 5 секунд
-      reconnectTimeoutRef.current = setTimeout(() => {
-        socket.connect();
-      }, 5000);
-    });
-
-    socketRef.current = socket;
-  }, []);
-
-  const handleArenaEvent = useCallback((event: LiveEvent) => {
-    console.log('Received arena event:', event);
-
-    switch (event.type) {
-      case 'bot_trade':
-        handleBotTrade(event);
-        break;
-      case 'bot_position_update':
-        handleBotPositionUpdate(event);
-        break;
-      case 'leaderboard_update':
-        handleLeaderboardUpdate(event);
-        break;
-      case 'price_update':
-        handlePriceUpdate(event);
-        break;
-      case 'moonshot':
-        handleMoonshot(event);
-        break;
-      case 'commentator_message':
-        handleCommentatorMessage(event);
-        break;
-    }
-  }, []);
-
   const handleBotTrade = useCallback((event: LiveEvent) => {
     const { botId, botName, action, tokenSymbol, price } = event.data;
     
@@ -188,6 +125,74 @@ export function useArenaWebSocket() {
       commentatorMessages: [message, ...prev.commentatorMessages.slice(0, 19)]
     }));
   }, []);
+
+  const handleArenaEvent = useCallback((event: LiveEvent) => {
+    console.log('Received arena event:', event);
+
+    switch (event.type) {
+      case 'bot_trade':
+        handleBotTrade(event);
+        break;
+      case 'bot_position_update':
+        handleBotPositionUpdate(event);
+        break;
+      case 'leaderboard_update':
+        handleLeaderboardUpdate(event);
+        break;
+      case 'price_update':
+        handlePriceUpdate(event);
+        break;
+      case 'moonshot':
+        handleMoonshot(event);
+        break;
+      case 'commentator_message':
+        handleCommentatorMessage(event);
+        break;
+    }
+  }, [
+    handleBotTrade,
+    handleBotPositionUpdate,
+    handleLeaderboardUpdate,
+    handlePriceUpdate,
+    handleMoonshot,
+    handleCommentatorMessage
+  ]);
+
+  const connect = useCallback(() => {
+    if (socketRef.current?.connected) return;
+
+    const socket = io({
+      path: '/api/arena/socket',
+      transports: ['websocket', 'polling'],
+    });
+
+    socket.on('connect', () => {
+      console.log('Connected to Arena WebSocket');
+      setState(prev => ({ ...prev, isConnected: true }));
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from Arena WebSocket');
+      setState(prev => ({ ...prev, isConnected: false }));
+    });
+
+    socket.on('connected', (data) => {
+      console.log('Arena WebSocket initialized:', data);
+    });
+
+    socket.on('arena_event', handleArenaEvent);
+
+    socket.on('connect_error', (error) => {
+      console.error('WebSocket connection error:', error);
+      
+      // Попробуем переподключиться через 5 секунд
+      reconnectTimeoutRef.current = setTimeout(() => {
+        socket.connect();
+      }, 5000);
+    });
+
+    socketRef.current = socket;
+  }, [handleArenaEvent]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
