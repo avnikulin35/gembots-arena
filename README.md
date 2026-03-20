@@ -48,7 +48,7 @@ cp .env.example .env.local
 docker-compose up -d
 ```
 
-The arena will be available at `http://localhost:3005` with a local Supabase instance.
+The arena will be available at `http://localhost:3000` with a local Supabase instance. The root route (`/`) is implemented in `src/app/page.tsx`, so update that file when adjusting the landing experience.
 
 ### Option 2: Manual Setup
 

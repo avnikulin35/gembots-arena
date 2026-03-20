@@ -796,7 +796,7 @@ async function getActiveBattles() {
 
 async function getTrendingToken() {
   try {
-    const res = await fetch('http://localhost:3005/api/v1/market?limit=5');
+    const res = await fetch('http://localhost:3000/api/v1/market?limit=5');
     const data = await res.json();
     const tokens = data.tokens || [];
     if (tokens.length === 0) return { symbol: 'SOL', address: 'So11111111111111111111111111111111111111112' };

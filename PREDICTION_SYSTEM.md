@@ -9,7 +9,7 @@
 curl -H "X-API-Key: bot_xxx" \
      -H "Content-Type: application/json" \
      -d '{"mint":"TokenMintAddress","confidence":85}' \
-     http://localhost:3005/api/v1/predict
+     http://localhost:3000/api/v1/predict
 ```
 
 **Ограничения:**
@@ -21,7 +21,7 @@ curl -H "X-API-Key: bot_xxx" \
 **GET /api/v1/predict**
 ```bash
 curl -H "X-API-Key: bot_xxx" \
-     http://localhost:3005/api/v1/predict?limit=10&offset=0&status=pending
+     http://localhost:3000/api/v1/predict?limit=10&offset=0&status=pending
 ```
 
 ### 2. Price Worker (`scripts/price-worker.js`)

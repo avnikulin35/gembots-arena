@@ -25,7 +25,8 @@ cp .env.example .env.local
 
 # Start dev server
 npm run dev
-# → http://localhost:3005
+# → http://localhost:3000
+# Root page: src/app/page.tsx handles `/`. Update it when modifying the landing experience.
 ```
 
 ## Docker Setup (Fastest)
@@ -40,7 +41,7 @@ cp .env.example .env.local
 # Start everything
 docker-compose up -d
 
-# App runs at http://localhost:3005
+# App runs at http://localhost:3000
 # PostgreSQL at localhost:54322
 # REST API at localhost:54321
 ```
@@ -108,7 +109,7 @@ server {
     server_name gembots.yourdomain.com;
 
     location / {
-        proxy_pass http://127.0.0.1:3005;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';

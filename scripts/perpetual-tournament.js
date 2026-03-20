@@ -1425,7 +1425,7 @@ async function simulateMatch(state, roundNum, match) {
   // Resolve tournament bets for this match
   try {
     const betMatchId = `${roundNum}_${match.matchOrder}_${state.id}`;
-    const res = await fetch('http://localhost:3005/api/tournament/bet/resolve', {
+    const res = await fetch('http://localhost:3000/api/tournament/bet/resolve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

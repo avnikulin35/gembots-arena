@@ -32,17 +32,17 @@
 
 ```bash
 # Сервер запущен
-✅ Next.js Dev Server: http://localhost:3005
-✅ WebSocket Server: ws://localhost:3005/api/arena/socket
-✅ Arena Page: http://localhost:3005/arena
-✅ Test Dashboard: http://localhost:3005/arena-test
+✅ Next.js Dev Server: http://localhost:3000
+✅ WebSocket Server: ws://localhost:3000/api/arena/socket
+✅ Arena Page: http://localhost:3000/arena
+✅ Test Dashboard: http://localhost:3000/arena-test
 ```
 
 ## 🎯 КАК ТЕСТИРОВАТЬ
 
 1. **Откройте Arena Test Dashboard**
    ```
-   http://localhost:3005/arena-test
+   http://localhost:3000/arena-test
    ```
 
 2. **Инициализируйте WebSocket**
@@ -51,7 +51,7 @@
 
 3. **Откройте Arena в новой вкладке**
    ```
-   http://localhost:3005/arena
+   http://localhost:3000/arena
    ```
 
 4. **Отправьте тестовые события**

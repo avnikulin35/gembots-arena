@@ -4,7 +4,7 @@
  * Creates player bots and simulates full battle flow against NPCs
  */
 
-const BASE_URL = process.env.GEMBOTS_URL || 'http://localhost:3005';
+const BASE_URL = process.env.GEMBOTS_URL || 'http://localhost:3000';
 const SUPABASE_URL = 'process.env.SUPABASE_URL';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 

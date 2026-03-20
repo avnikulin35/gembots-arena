@@ -26,7 +26,7 @@ cp .env.example .env.local
 
 # 5. Start dev server
 npm run dev
-# → http://localhost:3005
+# → http://localhost:3000
 
 # 6. Verify build
 npm run build

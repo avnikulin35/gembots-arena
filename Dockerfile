@@ -25,6 +25,6 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/providers ./providers
 COPY --from=builder /app/next.config.ts ./next.config.ts
 
-EXPOSE 3005
+EXPOSE 3000
 
 CMD ["npm", "start"]
