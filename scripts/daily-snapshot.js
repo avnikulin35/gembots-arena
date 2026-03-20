@@ -3,7 +3,10 @@
  * GemBots Daily Snapshot — записывает итоги дня в BSC блокчейн
  * 
  * Одна транзакция в день: 0 BNB transfer на свой адрес с JSON в input data.
- * Данные: дата, турнир, топ ботов (ELO, HP, wins, losses), итого боёв за день.
+ * Данные: дата, тип турнира, топ ботов (ELO, wins, losses), итого боёв за день.
+ * 
+ * Источник данных: SQLite (Trading League)
+ * База: ~/Projects/gembots/data/gembots.db
  * 
  * Запуск: node scripts/daily-snapshot.js [--date 2026-02-25] [--dry-run]
  */
@@ -34,10 +37,10 @@ if (fs.existsSync(contractsEnvPath)) {
 }
 
 const { ethers } = require('ethers');
+const Database = require('better-sqlite3');
 
 // --- Config ---
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const DB_PATH = path.join(__dirname, '..', 'data', 'gembots.db');
 const BSC_RPC = 'https://bsc-dataseed1.binance.org';
 const DEPLOYER_PK = process.env.DEPLOYER_PRIVATE_KEY;
 const WALLET_ADDRESS = '0x133C89BC9Dc375fBc46493A92f4Fd2486F8F0d76';
@@ -55,130 +58,114 @@ function getSnapshotDate() {
   return d.toISOString().split('T')[0];
 }
 
-// --- Supabase helper (with pagination for large result sets) ---
-async function supaQuery(table, query = '', fetchAll = false) {
-  if (!fetchAll) {
-    const url = `${SUPABASE_URL}/rest/v1/${table}?${query}`;
-    const res = await fetch(url, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-      },
-    });
-    if (!res.ok) throw new Error(`Supabase ${table}: ${res.status} ${await res.text()}`);
-    return res.json();
-  }
-  
-  // Paginated fetch
-  let all = [];
-  let offset = 0;
-  const pageSize = 1000;
-  while (true) {
-    const sep = query ? '&' : '';
-    const url = `${SUPABASE_URL}/rest/v1/${table}?${query}${sep}limit=${pageSize}&offset=${offset}`;
-    const res = await fetch(url, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-      },
-    });
-    if (!res.ok) throw new Error(`Supabase ${table}: ${res.status} ${await res.text()}`);
-    const page = await res.json();
-    all = all.concat(page);
-    if (page.length < pageSize) break;
-    offset += pageSize;
-  }
-  return all;
-}
-
 async function main() {
   const snapshotDate = getSnapshotDate();
   console.log(`📸 GemBots Daily Snapshot for ${snapshotDate}`);
   console.log(`   Mode: ${dryRun ? '🧪 DRY RUN' : '🔗 ON-CHAIN'}`);
+  console.log(`   Source: SQLite (Trading League)`);
 
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.error('❌ Missing SUPABASE_URL or SUPABASE_KEY');
+  if (!fs.existsSync(DB_PATH)) {
+    console.error(`❌ SQLite DB not found: ${DB_PATH}`);
     process.exit(1);
   }
 
-  // 1. Get all resolved battles for this date
-  const dayStart = `${snapshotDate}T00:00:00Z`;
-  const dayEnd = `${snapshotDate}T23:59:59Z`;
-  
-  const battles = await supaQuery('battles', 
-    `status=eq.resolved&finished_at=gte.${dayStart}&finished_at=lte.${dayEnd}&select=id,bot1_id,bot2_id,winner_id,token_symbol,bot1_prediction,bot2_prediction,actual_x,duration_minutes&order=finished_at.asc`,
-    true  // paginate to get ALL battles
-  );
+  const db = new Database(DB_PATH, { readonly: true });
 
-  console.log(`   ⚔️ Battles resolved: ${battles.length}`);
+  // 1. Total battles (all time)
+  const totalBattles = db.prepare(
+    `SELECT COUNT(*) as cnt FROM trading_battles WHERE status = 'resolved'`
+  ).get().cnt;
 
-  if (battles.length === 0) {
-    console.log('   ℹ️ No battles to snapshot. Exiting.');
-    return;
-  }
+  // 2. Battles today (resolved on snapshotDate)
+  const battlesToday = db.prepare(
+    `SELECT COUNT(*) as cnt FROM trading_battles
+     WHERE status = 'resolved' AND DATE(resolved_at) = ?`
+  ).get(snapshotDate).cnt;
 
-  // 2. Get current bot stats
-  const bots = await supaQuery('bots', 'select=id,name,elo,hp,wins,losses,nfa_id&order=elo.desc');
+  console.log(`   ⚔️ Total battles: ${totalBattles}`);
+  console.log(`   📅 Battles today (${snapshotDate}): ${battlesToday}`);
 
-  // 3. Compute daily stats per bot
-  const botStats = {};
-  for (const b of battles) {
-    for (const botId of [b.bot1_id, b.bot2_id]) {
-      if (!botStats[botId]) botStats[botId] = { wins: 0, losses: 0, battles: 0, perfectPredictions: 0 };
-      botStats[botId].battles++;
-      if (b.winner_id === botId) {
-        botStats[botId].wins++;
-      } else {
-        botStats[botId].losses++;
-      }
-    }
-  }
+  // 3. Unique tokens traded today
+  const tokenRows = db.prepare(
+    `SELECT DISTINCT symbol FROM trading_battles
+     WHERE status = 'resolved' AND DATE(resolved_at) = ?
+     ORDER BY symbol`
+  ).all(snapshotDate);
+  const tokens = tokenRows.map(r => r.symbol);
 
-  // 4. Build snapshot payload
-  const topBots = bots.slice(0, 20).map(b => ({
-    name: b.name,
-    elo: b.elo,
-    hp: b.hp,
-    w: b.wins,
-    l: b.losses,
-    nfa: b.nfa_id || null,
-    today: botStats[b.id] || { wins: 0, losses: 0, battles: 0 },
-  }));
+  // 4. Top bots by ELO (join with api_bots for name, find model from battles)
+  const topBotsRaw = db.prepare(
+    `SELECT e.bot_id as id, b.name, e.elo, e.wins, e.losses
+     FROM trading_elo e
+     JOIN api_bots b ON b.id = e.bot_id
+     ORDER BY e.elo DESC
+     LIMIT 10`
+  ).all();
 
-  // Token distribution
-  const tokenCounts = {};
-  for (const b of battles) {
-    tokenCounts[b.token_symbol] = (tokenCounts[b.token_symbol] || 0) + 1;
-  }
+  // Find most-recently-used model for each bot
+  const topBots = topBotsRaw.map(bot => {
+    // Check bot1_model and bot2_model — pick the latest non-null model this bot used
+    const modelRow = db.prepare(
+      `SELECT bot1_model as model FROM trading_battles
+       WHERE bot1_id = ? AND bot1_model IS NOT NULL
+       ORDER BY COALESCE(resolved_at, started_at) DESC LIMIT 1`
+    ).get(bot.id)
+      || db.prepare(
+      `SELECT bot2_model as model FROM trading_battles
+       WHERE bot2_id = ? AND bot2_model IS NOT NULL
+       ORDER BY COALESCE(resolved_at, started_at) DESC LIMIT 1`
+    ).get(bot.id);
 
+    return {
+      id: bot.id,
+      name: bot.name,
+      elo: Math.round(bot.elo * 100) / 100,
+      wins: bot.wins,
+      losses: bot.losses,
+      model: modelRow ? modelRow.model : null,
+    };
+  });
+
+  // 5. Unique models used across all battles
+  const modelRows = db.prepare(
+    `SELECT DISTINCT bot1_model as model FROM trading_battles WHERE bot1_model IS NOT NULL
+     UNION
+     SELECT DISTINCT bot2_model FROM trading_battles WHERE bot2_model IS NOT NULL
+     ORDER BY model`
+  ).all();
+  const models = modelRows.map(r => r.model);
+
+  db.close();
+
+  // 6. Build snapshot payload
   const snapshot = {
-    v: 1,
-    app: 'GemBots',
-    url: 'https://gembots.space',
     date: snapshotDate,
-    totalBattles: battles.length,
-    tokens: tokenCounts,
-    leaderboard: topBots,
-    ts: new Date().toISOString(),
+    type: 'trading_league',
+    totalBattles,
+    battlesToday,
+    tokens,
+    topBots,
+    models,
   };
 
   const jsonStr = JSON.stringify(snapshot);
   const dataBytes = ethers.toUtf8Bytes(jsonStr);
-  
-  console.log(`   📦 Payload: ${jsonStr.length} bytes`);
+
+  console.log(`\n   📦 Payload: ${jsonStr.length} bytes`);
+  console.log(`   🪙 Tokens today: ${tokens.join(', ') || 'none'}`);
   console.log(`   🏆 Top 3:`);
   topBots.slice(0, 3).forEach((b, i) => {
-    console.log(`      ${i + 1}. ${b.name} — ELO ${b.elo} | HP ${b.hp} | Today: ${b.today.wins}W/${b.today.losses}L`);
+    console.log(`      ${i + 1}. ${b.name} — ELO ${b.elo} | ${b.wins}W/${b.losses}L | ${b.model || 'unknown model'}`);
   });
+  console.log(`\n   JSON snapshot:\n${JSON.stringify(snapshot, null, 2)}`);
 
   if (dryRun) {
     console.log('\n🧪 DRY RUN — snapshot NOT sent to blockchain');
     console.log(`   Would send tx with ${dataBytes.length} bytes data to ${WALLET_ADDRESS}`);
-    console.log(`   JSON: ${jsonStr.substring(0, 200)}...`);
     return;
   }
 
-  // 5. Send on-chain
+  // 7. Send on-chain
   if (!DEPLOYER_PK) {
     console.error('❌ Missing DEPLOYER_PRIVATE_KEY');
     process.exit(1);
@@ -187,7 +174,7 @@ async function main() {
   const provider = new ethers.JsonRpcProvider(BSC_RPC);
   const wallet = new ethers.Wallet(DEPLOYER_PK, provider);
   
-  console.log(`   🔑 Wallet: ${wallet.address}`);
+  console.log(`\n   🔑 Wallet: ${wallet.address}`);
   const balance = await provider.getBalance(wallet.address);
   console.log(`   💰 Balance: ${ethers.formatEther(balance)} BNB`);
 
@@ -219,9 +206,11 @@ async function main() {
     try { records = JSON.parse(fs.readFileSync(recordPath, 'utf8')); } catch {}
     records.push({
       date: snapshotDate,
+      type: 'trading_league',
       txHash: tx.hash,
       blockNumber: receipt.blockNumber,
-      battles: battles.length,
+      totalBattles,
+      battlesToday,
       gasUsed: receipt.gasUsed.toString(),
       ts: new Date().toISOString(),
     });
