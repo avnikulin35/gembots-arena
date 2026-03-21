@@ -49,6 +49,10 @@ const MODEL_POOL = [
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+const CHAINGPT_API_KEY = process.env.CHAINGPT_API_KEY;
+const CHAINGPT_API_URL = 'https://api.chaingpt.org/chat/stream';
+const CHAINGPT_BOT_NAME = '🧠 ChainGPT';
+
 const STRATEGY_DESCRIPTIONS = {
   momentum: `You are a MOMENTUM trader. Follow the trend aggressively. If price is rising → BUY with conviction. If falling → SELL. Use leverage 5-15x when trend is strong.`,
   trend_follower: `You are a TREND FOLLOWER. BUY in uptrends, SELL in downtrends. Use moderate leverage 3-8x.`,
@@ -162,6 +166,61 @@ Respond ONLY with valid JSON:
   return { action: 'HOLD', size: 0.3, leverage: 3, confidence: 0.5, take_profit: 1.0, stop_loss: 0.5, reasoning: 'API error fallback' };
 }
 
+// ─── ChainGPT Decision ─────────────────────────────────────────────────────
+
+async function getChainGPTDecision(snapshot, strategy) {
+  const stratDesc = STRATEGY_DESCRIPTIONS[strategy] || STRATEGY_DESCRIPTIONS.momentum;
+  const question = `${stratDesc}
+
+Market data for ${snapshot.symbol}:
+- Current price: ${snapshot.price}
+- 1h change: ${snapshot.price_1h_pct?.toFixed(2)}%
+- 24h change: ${snapshot.price_24h_pct?.toFixed(2)}%
+- Volume 24h: ${(snapshot.volume_24h / 1e6)?.toFixed(1)}M
+- RSI-14: ${snapshot.rsi_14}
+- EMA9: ${snapshot.ema_9?.toFixed(2)}, EMA21: ${snapshot.ema_21?.toFixed(2)}
+
+Make a trading decision for the next 15 minutes.
+Respond ONLY with valid JSON:
+{"action":"BUY"|"SELL"|"HOLD","size":0.1-1.0,"leverage":1-20,"confidence":0.0-1.0,"take_profit":0.1-3.0,"stop_loss":0.1-2.0,"reasoning":"brief explanation"}`;
+
+  try {
+    const res = await fetch(CHAINGPT_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${CHAINGPT_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'general_assistant',
+        question,
+        chatHistory: 'off',
+      }),
+    });
+
+    if (!res.ok) throw new Error(`ChainGPT API ${res.status}`);
+    // Response is plain text (may be streamed), read as text
+    const text = await res.text();
+    const jsonMatch = text.match(/\{[\s\S]*?\}/);
+    if (jsonMatch) {
+      const d = JSON.parse(jsonMatch[0]);
+      return {
+        action: d.action || 'HOLD',
+        size: Math.min(1, Math.max(0.1, parseFloat(d.size) || 0.3)),
+        leverage: Math.min(20, Math.max(1, parseInt(d.leverage) || 5)),
+        confidence: Math.min(1, Math.max(0, parseFloat(d.confidence) || 0.5)),
+        take_profit: Math.min(5, Math.max(0.1, parseFloat(d.take_profit) || 1.0)),
+        stop_loss: Math.min(5, Math.max(0.1, parseFloat(d.stop_loss) || 0.5)),
+        reasoning: d.reasoning || '',
+      };
+    }
+    throw new Error('No JSON in ChainGPT response');
+  } catch (e) {
+    console.warn(`ChainGPT decision failed:`, e.message);
+  }
+  return { action: 'HOLD', size: 0.3, leverage: 3, confidence: 0.5, take_profit: 1.0, stop_loss: 0.5, reasoning: 'ChainGPT API error fallback' };
+}
+
 // ─── PnL Calculation ───────────────────────────────────────────────────────
 
 function calculatePnL(decision, entryPrice, exitPrice) {
@@ -265,12 +324,14 @@ async function runBattleCycle(db) {
     
     console.log(`⚔️  ${symbol}: ${bot1.name} vs ${bot2.name} | model assignment in progress...`);
     
-    const model1 = MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)];
-    const model2 = MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)];
+    const isChainGPT1 = bot1.name === CHAINGPT_BOT_NAME;
+    const isChainGPT2 = bot2.name === CHAINGPT_BOT_NAME;
+    const model1 = isChainGPT1 ? 'chaingpt/general_assistant' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)];
+    const model2 = isChainGPT2 ? 'chaingpt/general_assistant' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)];
     
     const [d1, d2] = await Promise.all([
-      getTradingDecision(model1, snap, bot1.strategy || 'momentum'),
-      getTradingDecision(model2, snap, bot2.strategy || 'momentum'),
+      isChainGPT1 ? getChainGPTDecision(snap, bot1.strategy || 'momentum') : getTradingDecision(model1, snap, bot1.strategy || 'momentum'),
+      isChainGPT2 ? getChainGPTDecision(snap, bot2.strategy || 'momentum') : getTradingDecision(model2, snap, bot2.strategy || 'momentum'),
     ]);
     
     console.log(`   ${bot1.name}[${model1.split('/')[1]}]: ${d1.action} x${d1.leverage} (conf:${d1.confidence.toFixed(2)})`);
