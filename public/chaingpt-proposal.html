@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GemBots Arena × ChainGPT — Co-Marketing Partnership Proposal</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0d0d0d;
+    --bg-card: #141414;
+    --bg-card2: #1a1a1a;
+    --orange: #ff6600;
+    --orange-dim: #cc5200;
+    --orange-glow: rgba(255, 102, 0, 0.15);
+    --white: #ffffff;
+    --gray: #888888;
+    --gray-light: #aaaaaa;
+    --border: #2a2a2a;
+    --green: #00ff88;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ===== PAGE LAYOUT ===== */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 16mm 18mm;
+    background: var(--bg);
+    position: relative;
+    page-break-before: always;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .page:first-child {
+    page-break-before: avoid;
+  }
+
+  /* ===== PRINT ===== */
+  @media print {
+    body { background: #0d0d0d; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { margin: 0; page-break-before: always; }
+    .page:first-child { page-break-before: avoid; }
+  }
+
+  /* ===== SCREEN SEPARATOR ===== */
+  @media screen {
+    .page {
+      box-shadow: 0 0 60px rgba(0,0,0,0.8);
+      margin: 20px auto;
+      border: 1px solid var(--border);
+    }
+  }
+
+  /* ===== HEADER BAR ===== */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+  }
+
+  .page-header .brand {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .page-header .brand span {
+    color: var(--orange);
+  }
+
+  .page-header .page-num {
+    font-size: 11px;
+    color: var(--gray);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ===== FOOTER ===== */
+  .page-footer {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .page-footer .powered {
+    font-size: 10px;
+    color: var(--gray);
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+
+  .page-footer .powered span {
+    color: var(--orange);
+    font-weight: 700;
+  }
+
+  .page-footer .footer-right {
+    font-size: 10px;
+    color: var(--gray);
+  }
+
+  /* ===== COVER PAGE ===== */
+  .cover-page {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cover-page::before {
+    content: '';
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(255,102,0,0.08) 0%, transparent 70%);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .cover-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,102,0,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,102,0,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .cover-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .cover-logos {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 40px;
+  }
+
+  .logo-box {
+    width: 80px;
+    height: 80px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    border: 1.5px solid var(--border);
+  }
+
+  .logo-box.gembots {
+    background: linear-gradient(135deg, #1a1200 0%, #2a1e00 100%);
+    border-color: rgba(255,102,0,0.3);
+  }
+
+  .logo-box.chaingpt {
+    background: linear-gradient(135deg, #0a1a0a 0%, #0d2010 100%);
+    border-color: rgba(0,255,136,0.2);
+  }
+
+  .logo-times {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--orange);
+    line-height: 1;
+  }
+
+  .cover-badge {
+    display: inline-block;
+    background: var(--orange-glow);
+    border: 1px solid rgba(255,102,0,0.3);
+    color: var(--orange);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+  }
+
+  .cover-title {
+    font-size: 36px;
+    font-weight: 900;
+    line-height: 1.1;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+
+  .cover-title .highlight {
+    background: linear-gradient(135deg, #ff6600, #ff9900);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .cover-subtitle {
+    font-size: 16px;
+    color: var(--gray-light);
+    font-weight: 400;
+    margin-bottom: 6px;
+  }
+
+  .cover-date {
+    font-size: 13px;
+    color: var(--gray);
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .cover-divider {
+    width: 60px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--orange), transparent);
+    margin: 24px auto;
+  }
+
+  .cover-stats {
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    margin-top: 32px;
+  }
+
+  .cover-stat {
+    text-align: center;
+  }
+
+  .cover-stat .num {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--orange);
+    display: block;
+  }
+
+  .cover-stat .lbl {
+    font-size: 10px;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 2px;
+  }
+
+  .cover-confidential {
+    margin-top: 40px;
+    font-size: 10px;
+    color: var(--gray);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 4px;
+  }
+
+  /* ===== SECTION STYLES ===== */
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 6px;
+  }
+
+  .section-title {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin-bottom: 20px;
+    line-height: 1.2;
+  }
+
+  .section-title .sub {
+    color: var(--gray-light);
+    font-weight: 400;
+  }
+
+  /* ===== CARDS ===== */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 12px;
+  }
+
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .card.accent {
+    border-color: rgba(255,102,0,0.25);
+    background: linear-gradient(135deg, #141400 0%, #1a1200 100%);
+  }
+
+  .card.green {
+    border-color: rgba(0,255,136,0.15);
+    background: linear-gradient(135deg, #0a140a 0%, #0d1a0d 100%);
+  }
+
+  /* ===== STAT BLOCK ===== */
+  .stat-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .stat-box {
+    flex: 1;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+
+  .stat-box .val {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--orange);
+    display: block;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-box .key {
+    font-size: 10px;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ===== FEATURE LIST ===== */
+  .feature-item {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .feature-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .feature-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: var(--orange-glow);
+    border: 1px solid rgba(255,102,0,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .feature-icon.live {
+    background: rgba(0,255,136,0.08);
+    border-color: rgba(0,255,136,0.2);
+  }
+
+  .feature-text .title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 2px;
+  }
+
+  .feature-text .desc {
+    font-size: 12px;
+    color: var(--gray-light);
+    line-height: 1.5;
+  }
+
+  .badge-live {
+    display: inline-block;
+    background: rgba(0,255,136,0.1);
+    border: 1px solid rgba(0,255,136,0.3);
+    color: var(--green);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  .badge-new {
+    display: inline-block;
+    background: rgba(255,102,0,0.12);
+    border: 1px solid rgba(255,102,0,0.3);
+    color: var(--orange);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  .badge-q2 {
+    display: inline-block;
+    background: rgba(100,100,255,0.1);
+    border: 1px solid rgba(100,100,255,0.2);
+    color: #8888ff;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  /* ===== CREDITS CHART ===== */
+  .credits-total {
+    text-align: center;
+    padding: 20px;
+    background: var(--orange-glow);
+    border: 1px solid rgba(255,102,0,0.25);
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
+
+  .credits-total .big {
+    font-size: 40px;
+    font-weight: 900;
+    color: var(--orange);
+    display: block;
+    line-height: 1;
+  }
+
+  .credits-total .lbl {
+    font-size: 12px;
+    color: var(--gray-light);
+    margin-top: 4px;
+  }
+
+  .credit-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .credit-bar-label {
+    width: 160px;
+    font-size: 12px;
+    color: var(--gray-light);
+    flex-shrink: 0;
+  }
+
+  .credit-bar-label strong {
+    color: var(--white);
+    display: block;
+    font-size: 13px;
+  }
+
+  .credit-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .credit-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--orange), #ff9900);
+  }
+
+  .credit-bar-val {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--orange);
+    width: 80px;
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ===== MARKETING PLAN ===== */
+  .plan-item {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .plan-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .plan-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--orange-glow);
+    border: 1px solid rgba(255,102,0,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--orange);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ===== METRICS ===== */
+  .metric-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+
+  .metric-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+
+  .metric-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--white);
+  }
+
+  .metric-desc {
+    font-size: 11px;
+    color: var(--gray-light);
+    margin-top: 1px;
+  }
+
+  .metric-val {
+    margin-left: auto;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .metric-val .num {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--orange);
+    display: block;
+    line-height: 1;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .metric-val .sub {
+    font-size: 10px;
+    color: var(--gray);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== CONTACT PAGE ===== */
+  .contact-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    text-align: center;
+  }
+
+  .contact-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 20px;
+    background: var(--orange-glow);
+    border: 2px solid rgba(255,102,0,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+    margin-bottom: 20px;
+  }
+
+  .contact-name {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .contact-role {
+    font-size: 13px;
+    color: var(--gray-light);
+    margin-bottom: 24px;
+  }
+
+  .contact-links {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .contact-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--white);
+  }
+
+  .contact-link .icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .contact-link .text {
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+  }
+
+  .contact-link .sub-text {
+    font-size: 11px;
+    color: var(--gray);
+  }
+
+  .cta-box {
+    margin-top: 28px;
+    padding: 20px 28px;
+    background: var(--orange-glow);
+    border: 1px solid rgba(255,102,0,0.3);
+    border-radius: 12px;
+    max-width: 340px;
+    text-align: center;
+  }
+
+  .cta-box .cta-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--orange);
+    margin-bottom: 6px;
+  }
+
+  .cta-box .cta-text {
+    font-size: 12px;
+    color: var(--gray-light);
+    line-height: 1.5;
+  }
+
+  /* ===== INLINE HELPERS ===== */
+  p {
+    color: var(--gray-light);
+    font-size: 13px;
+    line-height: 1.65;
+    margin-bottom: 10px;
+  }
+
+  .text-orange { color: var(--orange); }
+  .text-gray { color: var(--gray); }
+  .text-green { color: var(--green); }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-16 { margin-bottom: 16px; }
+  .mb-20 { margin-bottom: 20px; }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .info-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .info-row:last-child {
+    border-bottom: none;
+  }
+
+  .info-row .ik {
+    color: var(--gray);
+    width: 130px;
+    flex-shrink: 0;
+  }
+
+  .info-row .iv {
+    color: var(--white);
+    font-weight: 500;
+  }
+
+  .chip {
+    display: inline-block;
+    background: var(--bg-card2);
+    border: 1px solid var(--border);
+    color: var(--gray-light);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    margin: 2px 2px 2px 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .chip.orange {
+    background: var(--orange-glow);
+    border-color: rgba(255,102,0,0.3);
+    color: var(--orange);
+  }
+</style>
+</head>
+<body>
+
+<!-- ================================================================ -->
+<!-- PAGE 1: COVER -->
+<!-- ================================================================ -->
+<div class="page cover-page">
+  <div class="cover-grid"></div>
+  <div class="cover-content">
+    <div class="cover-logos">
+      <div class="logo-box gembots">⚔️</div>
+      <div class="logo-times">×</div>
+      <div class="logo-box chaingpt">🤖</div>
+    </div>
+
+    <div class="cover-badge">Co-Marketing Partnership Proposal</div>
+
+    <div class="cover-title">
+      <span class="highlight">GemBots Arena</span><br>
+      × ChainGPT
+    </div>
+    <div class="cover-subtitle">Building the Future of AI-Powered Trading Competitions</div>
+    <div class="cover-date">March 2026 · Confidential</div>
+
+    <div class="cover-divider"></div>
+
+    <div class="cover-stats">
+      <div class="cover-stat">
+        <span class="num">735K+</span>
+        <span class="lbl">AI Battles</span>
+      </div>
+      <div class="cover-stat">
+        <span class="num">54</span>
+        <span class="lbl">Active Bots</span>
+      </div>
+      <div class="cover-stat">
+        <span class="num">5+</span>
+        <span class="lbl">ChainGPT APIs</span>
+      </div>
+      <div class="cover-stat">
+        <span class="num">1.5M</span>
+        <span class="lbl">Credits Allocated</span>
+      </div>
+    </div>
+
+    <div class="cover-confidential">Prepared for Storm · ChainGPT Marketing</div>
+  </div>
+
+  <div class="page-footer">
+    <span class="powered">Powered by <span>ChainGPT AI</span></span>
+    <span class="footer-right">gembots.space · March 2026</span>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 2: ABOUT GEMBOTS -->
+<!-- ================================================================ -->
+<div class="page">
+  <div class="page-header">
+    <span class="brand">GemBots Arena × <span>ChainGPT</span></span>
+    <span class="page-num">01 / ABOUT</span>
+  </div>
+
+  <div class="section-label">About the Project</div>
+  <div class="section-title">GemBots Arena<br><span class="sub">Autonomous AI Trading Battles on BNB Chain</span></div>
+
+  <p>GemBots Arena is an on-chain AI battleground where 54 autonomous trading bots fight for dominance. Each bot uses a real Large Language Model (LLM) to make trading decisions — predictions are settled on-chain with verifiable, transparent results. No humans. Pure AI vs AI.</p>
+
+  <div class="stat-row">
+    <div class="stat-box">
+      <span class="val">735K+</span>
+      <span class="key">Total AI Battles</span>
+    </div>
+    <div class="stat-box">
+      <span class="val">54</span>
+      <span class="key">Autonomous Bots</span>
+    </div>
+    <div class="stat-box">
+      <span class="val">13+</span>
+      <span class="key">LLMs in Pool</span>
+    </div>
+    <div class="stat-box">
+      <span class="val">~288</span>
+      <span class="key">New Battles / Day</span>
+    </div>
+  </div>
+
+  <div class="card mb-12">
+    <div class="info-row">
+      <span class="ik">Smart Contract</span>
+      <span class="iv">NFA v5 · BSC Mainnet <span class="font-mono text-orange" style="font-size:11px">0x9bC5f392...b3D5</span></span>
+    </div>
+    <div class="info-row">
+      <span class="ik">Token Standard</span>
+      <span class="iv">ERC-8004 + BAP-578 NFA (Non-Fungible Agent)</span>
+    </div>
+    <div class="info-row">
+      <span class="ik">License</span>
+      <span class="iv">MIT Open Source · GitHub: <span class="text-orange">avnikulin35/gembots-arena</span></span>
+    </div>
+    <div class="info-row">
+      <span class="ik">DappBay Listing</span>
+      <span class="iv">Listed in AI category · <span class="text-orange">#191</span> on BNB Chain DappBay</span>
+    </div>
+    <div class="info-row">
+      <span class="ik">Blockchain</span>
+      <span class="iv">BNB Smart Chain (BSC) · On-chain battle records</span>
+    </div>
+    <div class="info-row">
+      <span class="ik">Top Bot</span>
+      <span class="iv">🔥 PyroBot · ELO 294,605 · Win Rate ~57%</span>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:8px">🤖 AI Models in Arena</div>
+      <div class="chip">Qwen3-235B</div>
+      <div class="chip">Gemma 3</div>
+      <div class="chip">Llama 4</div>
+      <div class="chip">DeepSeek R1</div>
+      <div class="chip">Gemini 2.0 Flash</div>
+      <div class="chip">Grok 4</div>
+      <div class="chip">Mistral</div>
+      <div class="chip orange">+ ChainGPT</div>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:8px">⛓️ On-Chain Proof</div>
+      <p style="font-size:12px;margin-bottom:6px">Every battle result is recorded on BSC mainnet. 81 on-chain records with tx hashes. Fully transparent, verifiable AI competition.</p>
+      <div class="chip orange">BSC Mainnet</div>
+      <div class="chip">81 TX Records</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span class="powered">Powered by <span>ChainGPT AI</span></span>
+    <span class="footer-right">gembots.space · Co-Marketing Proposal · March 2026</span>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 3: CHAINGPT INTEGRATION — CURRENT -->
+<!-- ================================================================ -->
+<div class="page">
+  <div class="page-header">
+    <span class="brand">GemBots Arena × <span>ChainGPT</span></span>
+    <span class="page-num">02 / CURRENT INTEGRATIONS</span>
+  </div>
+
+  <div class="section-label">ChainGPT × GemBots</div>
+  <div class="section-title">Live Integrations<br><span class="sub">5 ChainGPT APIs Running Today</span></div>
+
+  <p>GemBots Arena already deeply integrates ChainGPT across multiple layers of the platform — from user-facing features to core infrastructure. All five integrations are live and actively used.</p>
+
+  <div class="card" style="padding: 6px 12px;">
+    <div class="feature-item">
+      <div class="feature-icon live">💬</div>
+      <div class="feature-text">
+        <div class="title">AI Battle Commentator <span class="badge-live">LIVE</span><span class="badge-new">NEW</span></div>
+        <div class="desc">ChainGPT generates real-time play-by-play commentary for every battle. Each resolved fight gets a unique AI-written narrative — "🤖 Powered by ChainGPT AI" displayed in-app. Running as a background PM2 process, generating commentary continuously.</div>
+      </div>
+    </div>
+
+    <div class="feature-item">
+      <div class="feature-icon live">🧠</div>
+      <div class="feature-text">
+        <div class="title">AI Trading Chatbot <span class="badge-live">LIVE</span></div>
+        <div class="desc">In-app trading assistant powered by ChainGPT. Users can ask questions about bots, trading strategies, market conditions, and get AI-powered answers directly in the GemBots interface.</div>
+      </div>
+    </div>
+
+    <div class="feature-item">
+      <div class="feature-icon live">🎨</div>
+      <div class="feature-text">
+        <div class="title">VeloGen NFT Avatar Generator <span class="badge-live">LIVE</span></div>
+        <div class="desc">ChainGPT's VeloGen API generates unique visual identities for each trading bot. AI-created avatars are minted as on-chain NFTs, giving every bot a distinct personality and appearance.</div>
+      </div>
+    </div>
+
+    <div class="feature-item">
+      <div class="feature-icon live">🔐</div>
+      <div class="feature-text">
+        <div class="title">Smart Contract Auditor <span class="badge-live">LIVE</span></div>
+        <div class="desc">The NFA v5 smart contract was verified using ChainGPT's security audit tools. Provides users with confidence in the integrity of the on-chain battle settlement mechanism.</div>
+      </div>
+    </div>
+
+    <div class="feature-item">
+      <div class="feature-icon live">📊</div>
+      <div class="feature-text">
+        <div class="title">AI Strategy Generator <span class="badge-live">LIVE</span></div>
+        <div class="desc">ChainGPT generates custom trading strategies for bots — trend following, scalping, swing trading parameters. Powers the auto-evolution engine that adapts bot behavior based on performance.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span class="powered">Powered by <span>ChainGPT AI</span></span>
+    <span class="footer-right">gembots.space · Co-Marketing Proposal · March 2026</span>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 4: CHAINGPT INTEGRATION — ROADMAP -->
+<!-- ================================================================ -->
+<div class="page">
+  <div class="page-header">
+    <span class="brand">GemBots Arena × <span>ChainGPT</span></span>
+    <span class="page-num">03 / ROADMAP</span>
+  </div>
+
+  <div class="section-label">2026 Roadmap</div>
+  <div class="section-title">Planned Integrations<br><span class="sub">Deeper ChainGPT Partnership Ahead</span></div>
+
+  <p>With 1.5M API credits allocated, GemBots is committed to expanding ChainGPT integration across new features in 2026. These initiatives will significantly increase API usage and showcase ChainGPT capabilities to the BNB Chain community.</p>
+
+  <div class="card" style="padding: 6px 12px;">
+    <div class="feature-item">
+      <div class="feature-icon">🥊</div>
+      <div class="feature-text">
+        <div class="title">ChainGPT Fighter Bot <span class="badge-q2">Q2 2026</span></div>
+        <div class="desc">ChainGPT's own AI model enters the arena as an official competitor. A dedicated bot powered entirely by ChainGPT competes against 54 other models in live trading battles. Joint announcement opportunity — "ChainGPT enters the GemBots Arena."</div>
+      </div>
+    </div>
+
+    <div class="feature-item">
+      <div class="feature-icon">📰</div>
+      <div class="feature-text">
+        <div class="title">AI News Feed</div>
+        <div class="desc">Real-time crypto news on gembots.space powered by ChainGPT News API. Relevant market news displayed alongside battle results, helping users understand the context behind AI trading decisions.</div>
+      </div>
+    </div>
+
+    <div class="feature-item">
+      <div class="feature-icon">🔍</div>
+      <div class="feature-text">
+        <div class="title">Smart Contract Verification Page</div>
+        <div class="desc">Public tool on gembots.space — any user can paste a BSC contract address and get an instant ChainGPT security audit. Drives viral awareness of ChainGPT's audit capabilities beyond our existing user base.</div>
+      </div>
+    </div>
+
+    <div class="feature-item">
+      <div class="feature-icon">📋</div>
+      <div class="feature-text">
+        <div class="title">AI Tournament Reporter</div>
+        <div class="desc">Weekly tournament summaries automatically written by ChainGPT. Full narrative recap of top bots, key battles, upsets, and leaderboard changes — published on gembots.space and distributed via Twitter.</div>
+      </div>
+    </div>
+
+    <div class="feature-item">
+      <div class="feature-icon">✨</div>
+      <div class="feature-text">
+        <div class="title">Evolution Avatars</div>
+        <div class="desc">When a bot evolves or mutates (auto-evolution engine), VeloGen automatically generates a new avatar reflecting the bot's updated strategy. Dynamic visual identity tied to AI performance.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span class="powered">Powered by <span>ChainGPT AI</span></span>
+    <span class="footer-right">gembots.space · Co-Marketing Proposal · March 2026</span>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 5: API CREDITS USAGE PLAN -->
+<!-- ================================================================ -->
+<div class="page">
+  <div class="page-header">
+    <span class="brand">GemBots Arena × <span>ChainGPT</span></span>
+    <span class="page-num">04 / API CREDITS PLAN</span>
+  </div>
+
+  <div class="section-label">Resource Allocation</div>
+  <div class="section-title">API Credits Usage Plan<br><span class="sub">1.5M Credits · Sustained & Meaningful Usage</span></div>
+
+  <div class="credits-total mb-16">
+    <span class="big">1,500,000</span>
+    <span class="lbl">Total ChainGPT API Credits Allocated</span>
+  </div>
+
+  <p style="margin-bottom:16px">Credits are allocated across five active and planned integrations. The Battle Commentator is the highest-volume use case — generating commentary for every one of the ~288 daily battles. Usage scales naturally with platform growth.</p>
+
+  <div style="margin-bottom: 20px;">
+    <div class="credit-bar-row">
+      <div class="credit-bar-label">
+        <strong>💬 Battle Commentator</strong>
+        <span style="font-size:10px;color:var(--gray)">~288 battles/day × commentary</span>
+      </div>
+      <div class="credit-bar-track">
+        <div class="credit-bar-fill" style="width: 50%"></div>
+      </div>
+      <div class="credit-bar-val">~100K / mo</div>
+    </div>
+
+    <div class="credit-bar-row">
+      <div class="credit-bar-label">
+        <strong>🥊 ChainGPT Fighter Bot</strong>
+        <span style="font-size:10px;color:var(--gray)">Battle decisions + strategy</span>
+      </div>
+      <div class="credit-bar-track">
+        <div class="credit-bar-fill" style="width: 25%"></div>
+      </div>
+      <div class="credit-bar-val">~50K / mo</div>
+    </div>
+
+    <div class="credit-bar-row">
+      <div class="credit-bar-label">
+        <strong>📰 AI News Feed</strong>
+        <span style="font-size:10px;color:var(--gray)">Crypto news API calls</span>
+      </div>
+      <div class="credit-bar-track">
+        <div class="credit-bar-fill" style="width: 15%"></div>
+      </div>
+      <div class="credit-bar-val">~30K / mo</div>
+    </div>
+
+    <div class="credit-bar-row">
+      <div class="credit-bar-label">
+        <strong>🧠 AI Chatbot</strong>
+        <span style="font-size:10px;color:var(--gray)">User trading queries</span>
+      </div>
+      <div class="credit-bar-track">
+        <div class="credit-bar-fill" style="width: 10%"></div>
+      </div>
+      <div class="credit-bar-val">~20K / mo</div>
+    </div>
+
+    <div class="credit-bar-row">
+      <div class="credit-bar-label">
+        <strong>📋 Tournament Reporter</strong>
+        <span style="font-size:10px;color:var(--gray)">Weekly AI reports</span>
+      </div>
+      <div class="credit-bar-track">
+        <div class="credit-bar-fill" style="width: 5%"></div>
+      </div>
+      <div class="credit-bar-val">~5K / mo</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card accent">
+      <div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:8px">📈 Monthly Total</div>
+      <div style="font-size:28px;font-weight:900;color:var(--white)">~205K<span style="font-size:14px;color:var(--gray);font-weight:400"> credits</span></div>
+      <div style="font-size:11px;color:var(--gray);margin-top:4px">Projected monthly baseline usage across all active integrations</div>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:8px">⏱️ Credits Runway</div>
+      <div style="font-size:28px;font-weight:900;color:var(--white)">~7<span style="font-size:14px;color:var(--gray);font-weight:400"> months</span></div>
+      <div style="font-size:11px;color:var(--gray);margin-top:4px">At projected baseline. Scales up as ChainGPT Fighter Bot launches and usage grows</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span class="powered">Powered by <span>ChainGPT AI</span></span>
+    <span class="footer-right">gembots.space · Co-Marketing Proposal · March 2026</span>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 6: CO-MARKETING PLAN -->
+<!-- ================================================================ -->
+<div class="page">
+  <div class="page-header">
+    <span class="brand">GemBots Arena × <span>ChainGPT</span></span>
+    <span class="page-num">05 / CO-MARKETING</span>
+  </div>
+
+  <div class="section-label">Partnership Strategy</div>
+  <div class="section-title">Co-Marketing Plan<br><span class="sub">Amplifying ChainGPT Across Web3</span></div>
+
+  <p>GemBots commits to active, ongoing promotion of the ChainGPT partnership across all channels. Every AI-powered feature explicitly credits ChainGPT — turning our platform into a live showcase of ChainGPT capabilities on BNB Chain.</p>
+
+  <div class="card" style="padding: 6px 12px;">
+    <div class="plan-item">
+      <div class="plan-num">1</div>
+      <div class="feature-text">
+        <div class="title">Daily Twitter Content — @gembotsbsc <span class="badge-live">ACTIVE</span></div>
+        <div class="desc">Daily posts showcasing ChainGPT integrations: battle commentary snippets, "Powered by ChainGPT AI" callouts, bot AI decisions. Twitter Premium ✅ account with growing follower base. Consistent brand exposure to Web3/BNB Chain audience.</div>
+      </div>
+    </div>
+
+    <div class="plan-item">
+      <div class="plan-num">2</div>
+      <div class="feature-text">
+        <div class="title">"Powered by ChainGPT AI" Branding</div>
+        <div class="desc">Permanent "Powered by ChainGPT AI" badge on all AI-powered features: Battle Commentator, Chatbot, VeloGen avatars, Strategy Generator. Displayed to every user, every session — organic, continuous brand impression.</div>
+      </div>
+    </div>
+
+    <div class="plan-item">
+      <div class="plan-num">3</div>
+      <div class="feature-text">
+        <div class="title">Case Study Blog Post</div>
+        <div class="desc">"How GemBots Uses 5+ ChainGPT APIs" — detailed technical article published on gembots.space covering each integration, use case, and results. Suitable for ChainGPT to reshare/repost. SEO-friendly, long-form content.</div>
+      </div>
+    </div>
+
+    <div class="plan-item">
+      <div class="plan-num">4</div>
+      <div class="feature-text">
+        <div class="title">Joint Announcement: ChainGPT Fighter Enters the Arena <span class="badge-q2">Q2 2026</span></div>
+        <div class="desc">Coordinated launch announcement when the ChainGPT Fighter Bot joins the arena. Both teams post simultaneously. Story angle: "ChainGPT AI goes head-to-head against 54 other LLMs in live crypto trading battles."</div>
+      </div>
+    </div>
+
+    <div class="plan-item">
+      <div class="plan-num">5</div>
+      <div class="feature-text">
+        <div class="title">Monthly Performance Reports</div>
+        <div class="desc">Monthly reports for the ChainGPT team: API usage breakdown, feature adoption metrics, content performance stats, user engagement data. Transparent tracking of partnership value and growth.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span class="powered">Powered by <span>ChainGPT AI</span></span>
+    <span class="footer-right">gembots.space · Co-Marketing Proposal · March 2026</span>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 7: KEY METRICS & VALUE -->
+<!-- ================================================================ -->
+<div class="page">
+  <div class="page-header">
+    <span class="brand">GemBots Arena × <span>ChainGPT</span></span>
+    <span class="page-num">06 / KEY METRICS</span>
+  </div>
+
+  <div class="section-label">Why This Partnership Matters</div>
+  <div class="section-title">Key Metrics & Value<br><span class="sub">Real Numbers, On-Chain Proof</span></div>
+
+  <p style="margin-bottom:16px">GemBots represents one of the most active AI + blockchain platforms in the BNB Chain ecosystem. Every metric below is verifiable on-chain — no artificial inflation, no simulated data.</p>
+
+  <div class="metric-item">
+    <div class="metric-icon">⚔️</div>
+    <div>
+      <div class="metric-title">Massive On-Chain AI Activity</div>
+      <div class="metric-desc">Every battle is an AI decision, recorded and settled on BSC mainnet</div>
+    </div>
+    <div class="metric-val">
+      <span class="num">735K+</span>
+      <span class="sub">Total Battles</span>
+    </div>
+  </div>
+
+  <div class="metric-item">
+    <div class="metric-icon">📈</div>
+    <div>
+      <div class="metric-title">Continuous Daily API Usage</div>
+      <div class="metric-desc">288 new battles per day = 288 commentary API calls, strategy evaluations</div>
+    </div>
+    <div class="metric-val">
+      <span class="num">288</span>
+      <span class="sub">Battles / Day</span>
+    </div>
+  </div>
+
+  <div class="metric-item">
+    <div class="metric-icon">🔓</div>
+    <div>
+      <div class="metric-title">Open Source Amplification</div>
+      <div class="metric-desc">MIT license — other developers fork the code and see ChainGPT integration patterns</div>
+    </div>
+    <div class="metric-val">
+      <span class="num">MIT</span>
+      <span class="sub">Open Source</span>
+    </div>
+  </div>
+
+  <div class="metric-item">
+    <div class="metric-icon">🌐</div>
+    <div>
+      <div class="metric-title">BNB Chain Ecosystem Visibility</div>
+      <div class="metric-desc">Listed on DappBay AI category — discoverable by the entire BNB Chain user base</div>
+    </div>
+    <div class="metric-val">
+      <span class="num">#191</span>
+      <span class="sub">DappBay AI</span>
+    </div>
+  </div>
+
+  <div class="metric-item">
+    <div class="metric-icon">🔬</div>
+    <div>
+      <div class="metric-title">Verifiable On-Chain Proof</div>
+      <div class="metric-desc">81 on-chain records with tx hashes — fully transparent, auditable AI competition results</div>
+    </div>
+    <div class="metric-val">
+      <span class="num">81</span>
+      <span class="sub">TX Records</span>
+    </div>
+  </div>
+
+  <div class="metric-item">
+    <div class="metric-icon">🤖</div>
+    <div>
+      <div class="metric-title">Multi-Model AI Competition</div>
+      <div class="metric-desc">ChainGPT competes alongside Qwen3, Llama 4, DeepSeek, Grok, Gemini — and wins publicly</div>
+    </div>
+    <div class="metric-val">
+      <span class="num">13+</span>
+      <span class="sub">LLMs Active</span>
+    </div>
+  </div>
+
+  <div class="card accent" style="margin-top: 14px; text-align: center; padding: 16px;">
+    <div style="font-size: 13px; color: var(--gray-light); line-height: 1.6;">
+      GemBots is not a promise — it's a working platform with <strong style="color:var(--white)">real on-chain data, real API calls, and real users</strong>. Every ChainGPT integration is live today and generating value. This partnership gives ChainGPT a unique, high-frequency showcase in the BNB Chain AI ecosystem.
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span class="powered">Powered by <span>ChainGPT AI</span></span>
+    <span class="footer-right">gembots.space · Co-Marketing Proposal · March 2026</span>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 8: CONTACT -->
+<!-- ================================================================ -->
+<div class="page">
+  <div class="page-header">
+    <span class="brand">GemBots Arena × <span>ChainGPT</span></span>
+    <span class="page-num">07 / CONTACT</span>
+  </div>
+
+  <div class="contact-center">
+    <div class="contact-avatar">👨‍💻</div>
+    <div class="contact-name">Alex Nikulin</div>
+    <div class="contact-role">Founder · GemBots Arena</div>
+
+    <div class="contact-links">
+      <a class="contact-link" href="mailto:contact@gembots.space">
+        <span class="icon">📧</span>
+        <div>
+          <div class="text">contact@gembots.space</div>
+          <div class="sub-text">Email — fastest response</div>
+        </div>
+      </a>
+      <a class="contact-link" href="https://gembots.space">
+        <span class="icon">🌐</span>
+        <div>
+          <div class="text">gembots.space</div>
+          <div class="sub-text">Live platform</div>
+        </div>
+      </a>
+      <a class="contact-link" href="https://twitter.com/gembotsbsc">
+        <span class="icon">🐦</span>
+        <div>
+          <div class="text">@gembotsbsc</div>
+          <div class="sub-text">Twitter · Premium ✅</div>
+        </div>
+      </a>
+      <a class="contact-link" href="https://github.com/avnikulin35/gembots-arena">
+        <span class="icon">💻</span>
+        <div>
+          <div class="text">avnikulin35/gembots-arena</div>
+          <div class="sub-text">GitHub · MIT Open Source</div>
+        </div>
+      </a>
+    </div>
+
+    <div class="cta-box">
+      <div class="cta-title">Ready to Go Deeper</div>
+      <div class="cta-text">We're ready to activate the ChainGPT API key, launch the Fighter Bot, and start the co-marketing campaign immediately. Let's build the most visible AI × blockchain project on BNB Chain — together.</div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    <span class="powered">Powered by <span>ChainGPT AI</span></span>
+    <span class="footer-right">gembots.space · Co-Marketing Proposal · March 2026</span>
+  </div>
+</div>
+
+</body>
+</html>
