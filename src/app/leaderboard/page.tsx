@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import BattleCommentary from '@/components/BattleCommentary';
 
 interface TradingEloData {
   bot_id: number;
@@ -273,11 +272,6 @@ function TradingLeagueTab({ data }: { data: TradingLeagueData | null }) {
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* ChainGPT AI Battle Commentary */}
-      <div className="mt-8">
-        <BattleCommentary />
       </div>
 
       {/* Recent battles */}

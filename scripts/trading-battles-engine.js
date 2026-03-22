@@ -179,6 +179,10 @@ Market data for ${snapshot.symbol}:
 - Volume 24h: ${(snapshot.volume_24h / 1e6)?.toFixed(1)}M
 - RSI-14: ${snapshot.rsi_14}
 - EMA9: ${snapshot.ema_9?.toFixed(2)}, EMA21: ${snapshot.ema_21?.toFixed(2)}
+- MACD: ${snapshot.macd?.macd?.toFixed(4) || snapshot.macd?.toFixed?.(4) || "N/A"}, Signal: ${snapshot.macd?.signal?.toFixed(4) || snapshot.macd_signal?.toFixed?.(4) || "N/A"}
+- Funding Rate: ${snapshot.funding_rate?.toFixed(6) || "N/A"}
+- Orderbook Imbalance: ${snapshot.orderbook_imbalance?.toFixed(4) || "N/A"}
+- Open Interest: ${snapshot.open_interest ? (snapshot.open_interest / 1e6)?.toFixed(1) + "M" : "N/A"}
 
 Make a trading decision for the next 15 minutes.
 Respond ONLY with valid JSON:
@@ -218,7 +222,7 @@ Respond ONLY with valid JSON:
   } catch (e) {
     console.warn(`ChainGPT decision failed:`, e.message);
   }
-  return { action: 'HOLD', size: 0.3, leverage: 3, confidence: 0.5, take_profit: 1.0, stop_loss: 0.5, reasoning: 'ChainGPT API error fallback' };
+  const fallbackAction = Math.random() > 0.5 ? 'BUY' : 'SELL'; return { action: fallbackAction, size: 0.3, leverage: 3, confidence: 0.3, take_profit: 0.5, stop_loss: 0.3, reasoning: 'ChainGPT API error — random fallback' };
 }
 
 // ─── PnL Calculation ───────────────────────────────────────────────────────

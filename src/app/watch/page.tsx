@@ -8,6 +8,7 @@ import { VSBadge } from '@/components/tournament/VSBadge';
 import TokenPriceChart from '@/components/tournament/TokenPriceChart';
 import TradeTicker from '@/components/tournament/TradeTicker';
 import { ArenaBackground } from '@/components/tournament/ArenaEffects';
+import BattleCommentary from '@/components/BattleCommentary';
 import { TickerTrade } from '@/components/tournament/TradeTicker'; // Import TickerTrade type
 // Removed import for BotSprites as it's not a default export and its `RobotSprite` component is too complex for simple miniatures.
 
@@ -361,6 +362,13 @@ export default function WatchPage() {
 
         {/* Recent Results and Leaderboard */}
         <div className="lg:col-span-1 space-y-8">
+          <motion.div
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+          >
+            <BattleCommentary className="shadow-xl" />
+          </motion.div>
           {/* Recent Results Section */}
           <motion.div
             initial={{ opacity: 0, x: 50 }}

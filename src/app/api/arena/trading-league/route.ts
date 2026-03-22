@@ -137,7 +137,7 @@ export async function GET() {
         SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) as wins,
         SUM(CASE WHEN won=0 AND draw=0 THEN 1 ELSE 0 END) as losses,
         SUM(CASE WHEN draw=1 THEN 1 ELSE 0 END) as draws,
-        ROUND(100.0 * SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) / COUNT(*), 1) as win_rate,
+        ROUND(CASE WHEN (SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) + SUM(CASE WHEN won=0 AND draw=0 THEN 1 ELSE 0 END)) > 0 THEN 100.0 * SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) / (SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) + SUM(CASE WHEN won=0 AND draw=0 THEN 1 ELSE 0 END)) ELSE 0 END, 1) as win_rate,
         ROUND(AVG(pnl), 4) as avg_pnl,
         ROUND(SUM(pnl), 2) as total_pnl,
         ROUND(MAX(pnl), 2) as best_trade,
