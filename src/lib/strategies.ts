@@ -22,7 +22,7 @@ export interface MarketToken {
   risk_score?: number;
 }
 
-export type StrategyId = 'trend_follower' | 'whale_watcher' | 'chaos' | 'mean_reversion' | 'smart_ai' | 'aggressive' | 'conservative' | 'random' | 'smart';
+export type StrategyId = 'trend_follower' | 'whale_watcher' | 'chaos' | 'mean_reversion' | 'smart_ai' | 'aggressive' | 'conservative' | 'random' | 'smart' | 'disciplined_alpha' | 'macd_rsi_filter' | 'dynamic_sl_tp';
 
 export type StrategyFn = (token: MarketToken) => number;
 
@@ -208,6 +208,146 @@ export function smartAI(token: MarketToken): number {
   return clamp(prediction + noise, 0.3, 5.0);
 }
 
+/**
+ * 🏆 Disciplined Alpha
+ * Inspired by Alpha Arena Season 1 winners (Qwen, DeepSeek):
+ * Few but confident trades. Strict entry filters, no overtrading.
+ * Only enters when multiple signals align — otherwise holds (returns ~1x).
+ * Max 43 "trades" (high-conviction entries) per session.
+ * Source: iWeaver Alpha Arena Season 1 analysis
+ */
+export function disciplinedAlpha(token: MarketToken): number {
+  const change = token.price_change_1h ?? 0;
+  const sm = token.smart_money ?? 0;
+  const risk = token.risk_score ?? 50;
+  const liquidity = token.liquidity ?? 0;
+  const holders = token.holders ?? 0;
+  const v2Score = token.v2_score ?? 50;
+
+  // Safety gates — do not enter low-quality setups
+  if (risk > 70) return clamp(0.9 + Math.random() * 0.1, 0.85, 1.05); // Skip risky
+  if (liquidity < 20000) return clamp(0.95 + Math.random() * 0.1, 0.9, 1.05); // Skip illiquid
+  if (holders < 100) return clamp(0.95 + Math.random() * 0.1, 0.9, 1.05); // Skip low-holder
+
+  // Count aligned signals
+  let bullSignals = 0;
+  let bearSignals = 0;
+
+  if (change > 10) bullSignals++;
+  if (change < -10) bearSignals++;
+  if (sm >= 2) bullSignals++;
+  if (v2Score > 65) bullSignals++;
+  if (v2Score < 35) bearSignals++;
+  if (liquidity > 100000) bullSignals++; // Deep liquidity = sustainable move
+
+  // Only act when 3+ signals align — otherwise sit out (return ~1x)
+  if (bullSignals >= 3) {
+    // High-conviction long — disciplined sizing
+    const conviction = bullSignals / 5;
+    return clamp(1.5 + conviction * 1.5, 1.5, 2.8);
+  } else if (bearSignals >= 2) {
+    // High-conviction short
+    return clamp(0.5 - bearSignals * 0.05, 0.35, 0.7);
+  }
+
+  // Low-conviction: sit on hands, hold near 1x
+  return clamp(0.95 + (Math.random() - 0.5) * 0.1, 0.88, 1.12);
+}
+
+/**
+ * 📈 MACD+RSI Filter
+ * Technical indicator combo: trend confirmation via MACD-like logic
+ * + overbought/oversold RSI proxy. Emulates low-frequency technical trading.
+ * Uses price_change_1h as RSI proxy, swaps_count as volume/momentum proxy.
+ * Source: Alpha Arena research recommendation
+ */
+export function macdRsiFilter(token: MarketToken): number {
+  const change1h = token.price_change_1h ?? 0;
+  const swaps = token.swaps_count ?? 0;
+  const risk = token.risk_score ?? 50;
+  const liquidity = token.liquidity ?? 0;
+
+  // RSI proxy: based on price change
+  // >70 = overbought, <30 = oversold
+  const rsiProxy = Math.max(0, Math.min(100, 50 + change1h * 0.5));
+
+  // MACD proxy: momentum (swaps acceleration)
+  // High swaps + positive price = MACD bullish cross
+  const macdBull = swaps > 200 && change1h > 5;
+  const macdBear = swaps < 50 && change1h < -5;
+
+  // Liquidity filter — only trade liquid markets
+  const liquidityOk = liquidity > 30000;
+
+  // Risk filter
+  if (risk > 65 || !liquidityOk) {
+    return clamp(1.0 + (Math.random() - 0.5) * 0.1, 0.95, 1.05);
+  }
+
+  if (macdBull && rsiProxy < 70) {
+    // Bullish cross + not overbought → BUY
+    const strength = Math.min((rsiProxy - 50) / 20, 1.0);
+    return clamp(1.4 + strength * 0.8, 1.4, 2.2);
+  } else if (macdBull && rsiProxy >= 70) {
+    // Bullish but overbought → mild buy or hold
+    return clamp(1.1 + Math.random() * 0.2, 1.1, 1.3);
+  } else if (macdBear && rsiProxy > 30) {
+    // Bearish cross + not oversold → SELL
+    const strength = Math.min((50 - rsiProxy) / 20, 1.0);
+    return clamp(0.7 - strength * 0.2, 0.5, 0.7);
+  } else if (rsiProxy < 30 && !macdBear) {
+    // Oversold + no bearish pressure → contrarian buy
+    return clamp(1.3 + Math.random() * 0.4, 1.3, 1.7);
+  }
+
+  // No signal → hold
+  return clamp(1.0 + (Math.random() - 0.5) * 0.15, 0.9, 1.1);
+}
+
+/**
+ * 🛡️ Dynamic SL/TP
+ * Controls trade count per session + dynamic stop-loss / take-profit logic.
+ * Prioritises capital preservation. Based on Alpha Arena style: hold ~35h in position
+ * when thesis intact, cut fast when invalidated.
+ * Source: Alpha Arena Season 1 DeepSeek strategy (35h avg hold, tight SL)
+ */
+export function dynamicSlTp(token: MarketToken): number {
+  const change = token.price_change_1h ?? 0;
+  const risk = token.risk_score ?? 50;
+  const sm = token.smart_money ?? 0;
+  const liquidity = token.liquidity ?? 0;
+  const age = token.age_minutes ?? 60;
+
+  // Dynamic SL proxy: cut position if risk elevated or negative momentum
+  const stopLossTriggered = risk > 65 || (change < -15 && sm === 0);
+
+  if (stopLossTriggered) {
+    // Stop-loss: protect capital, predict steep drop
+    return clamp(0.45 + Math.random() * 0.15, 0.4, 0.65);
+  }
+
+  // Dynamic TP proxy: profit target based on thesis strength
+  const thesisStrength = (sm * 15) + (Math.max(0, 100 - risk) * 0.3) + (liquidity > 50000 ? 10 : 0);
+
+  // TP tiers
+  if (thesisStrength > 60 && change > 0 && age > 30) {
+    // Strong thesis, let winner run — hold/extend
+    return clamp(1.8 + thesisStrength / 100, 1.8, 2.5);
+  } else if (thesisStrength > 40 && change > 5) {
+    // Moderate thesis — partial take profit
+    return clamp(1.4 + thesisStrength / 120, 1.4, 1.9);
+  } else if (change > 30) {
+    // TP at +30% — take money off the table regardless
+    return clamp(0.85 + Math.random() * 0.15, 0.85, 1.0);
+  } else if (change > -5 && thesisStrength > 20) {
+    // Wait — thesis intact, hold
+    return clamp(1.1 + thesisStrength / 200, 1.05, 1.4);
+  }
+
+  // Default: cautious hold
+  return clamp(1.0 + (Math.random() - 0.5) * 0.2, 0.85, 1.15);
+}
+
 // Helper
 function clamp(value: number, min: number, max: number): number {
   return parseFloat(Math.max(min, Math.min(max, value)).toFixed(2));
@@ -221,6 +361,10 @@ const STRATEGY_REGISTRY: Record<string, StrategyFn> = {
   chaos: chaosBot,
   mean_reversion: meanReversion,
   smart_ai: smartAI,
+  // Alpha Arena-inspired low-frequency strategies (added 2026-03-22)
+  disciplined_alpha: disciplinedAlpha,
+  macd_rsi_filter: macdRsiFilter,
+  dynamic_sl_tp: dynamicSlTp,
   // Legacy strategy IDs from the UI
   aggressive: trendFollower,    // Aggressive → Trend Follower
   conservative: meanReversion,  // Conservative → Mean Reversion
@@ -252,4 +396,8 @@ export const STRATEGIES_META = [
   { id: 'chaos', name: '🎲 Chaos Bot', desc: 'Pure random predictions 0.5-5.0x', color: 'from-purple-600 to-pink-600' },
   { id: 'mean_reversion', name: '📊 Mean Reversion', desc: 'Bets against the trend — buys dips, sells rips', color: 'from-teal-600 to-cyan-600' },
   { id: 'smart_ai', name: '🧠 Smart AI', desc: 'Combines trend, smart money, volatility & risk analysis', color: 'from-green-600 to-emerald-600' },
+  // Alpha Arena-inspired low-frequency strategies
+  { id: 'disciplined_alpha', name: '🏆 Disciplined Alpha', desc: 'Few but confident entries — only trades when 3+ signals align (α Arena style)', color: 'from-yellow-600 to-amber-600' },
+  { id: 'macd_rsi_filter', name: '📈 MACD+RSI Filter', desc: 'Technical combo: MACD cross + RSI overbought/oversold filter', color: 'from-sky-600 to-blue-600' },
+  { id: 'dynamic_sl_tp', name: '🛡️ Dynamic SL/TP', desc: 'Capital-first: tight stop-loss, dynamic take-profit, lets winners run', color: 'from-rose-600 to-red-600' },
 ];
