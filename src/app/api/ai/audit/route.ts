@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { getProvider } from "../../../../lib/ai-provider";
+import { rateLimit, getClientIP } from '@/lib/rate-limit';
 
 const CACHE_PATH = join(process.cwd(), "data", "audit-cache.json");
 
@@ -91,7 +92,14 @@ function parseScore(text: string): number {
   return 70;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Rate limit: 2 req/min per IP (audit is expensive)
+  const ip = getClientIP(req);
+  const { allowed } = rateLimit(`ai-audit:${ip}`, 2, 60_000);
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   try {
     // Check cache first
     if (existsSync(CACHE_PATH)) {

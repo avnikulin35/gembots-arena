@@ -165,43 +165,13 @@ export class ArenaWebSocketManager {
   }
 
   private getTokenSymbol(tokenMint: string): string {
-    // 1. Check in-memory cache first (populated by trade events / stakes)
-    const cached = this.tokenSymbolCache.get(tokenMint);
-    if (cached) return cached;
-
-    // 2. Look up in stakes DB — token_symbol is stored there
-    try {
-      const activeStakes = getActiveStakes();
-      const stake = activeStakes.find((s: any) => s.token_mint === tokenMint && s.token_symbol);
-      if (stake?.token_symbol) {
-        this.tokenSymbolCache.set(tokenMint, stake.token_symbol);
-        return stake.token_symbol;
-      }
-    } catch (_) {
-      // DB lookup failed, fall through
-    }
-
-    // 3. Static fallback for well-known mints
+    // TODO: Получать из кеша или API
     const symbolMap: { [key: string]: string } = {
-      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': 'USDC',
-      'So11111111111111111111111111111111111111112': 'SOL',
-      'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263': 'WIF',
-      'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm': 'WIF',
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': 'PEPE',
+      'So11111111111111111111111111111111111111112': 'DOGE',
+      'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263': 'WIF'
     };
-    const fallback = symbolMap[tokenMint] || tokenMint.slice(0, 6).toUpperCase();
-    // Cache for next time
-    this.tokenSymbolCache.set(tokenMint, fallback);
-    return fallback;
-  }
-
-  /** Cache for token symbols resolved during runtime */
-  private tokenSymbolCache: Map<string, string> = new Map();
-
-  /** Called externally when a trade event arrives with a known symbol */
-  public cacheTokenSymbol(tokenMint: string, symbol: string): void {
-    if (symbol && symbol !== 'UNKNOWN') {
-      this.tokenSymbolCache.set(tokenMint, symbol);
-    }
+    return symbolMap[tokenMint] || 'UNKNOWN';
   }
 
   private async updateLeaderboard() {

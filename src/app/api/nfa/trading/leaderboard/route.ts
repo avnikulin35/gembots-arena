@@ -1,228 +1,230 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
+
+export const dynamic = 'force-dynamic';
+
+const DB_PATH = path.join(process.cwd(), 'data/gembots.db');
+const TOURNAMENT_FILE = path.join(process.cwd(), 'data', 'tournament.json');
 
 /**
  * GET /api/nfa/trading/leaderboard
- * 
+ *
  * Query params:
  *   type=tournament  — current tournament ranking
  *   type=alltime     — all-time by total_pnl
  *   type=weekly      — last 7 days
- *   tournament_id=X  — specific tournament
+ *   tournament_id=X  — specific tournament (uses tournament.json if matches)
  *   (no params)      — legacy: returns all bots with stats
+ *
+ * Source of truth: SQLite (trading_elo, trading_battles, api_bots)
  */
 export async function GET(request: NextRequest) {
+  let db: Database.Database | null = null;
   try {
+    db = new Database(DB_PATH, { readonly: true });
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');
     const tournamentId = searchParams.get('tournament_id');
 
-    // ─── Tournament leaderboard (specific or current) ───
     if (type === 'tournament' || tournamentId) {
-      return await getTournamentLeaderboard(tournamentId ? parseInt(tournamentId) : null);
+      return getTournamentLeaderboard(db);
     }
 
-    // ─── All-time leaderboard ───
     if (type === 'alltime') {
-      return await getAllTimeLeaderboard();
+      return getAllTimeLeaderboard(db);
     }
 
-    // ─── Weekly leaderboard ───
     if (type === 'weekly') {
-      return await getWeeklyLeaderboard();
+      return getWeeklyLeaderboard(db);
     }
 
-    // ─── Legacy: all bots with stats (backward compat) ───
-    return await getLegacyLeaderboard();
+    return getLegacyLeaderboard(db);
   } catch (err) {
     console.error('GET /api/nfa/trading/leaderboard error:', err);
     return NextResponse.json({ bots: [], entries: [], tournament: null });
+  } finally {
+    db?.close();
   }
 }
 
-async function getTournamentLeaderboard(tournamentId: number | null) {
-  let tournament;
-
-  if (tournamentId) {
-    const { data } = await supabase
-      .from('trading_tournaments')
-      .select('*')
-      .eq('id', tournamentId)
-      .single();
-    tournament = data;
-  } else {
-    const { data } = await supabase
-      .from('trading_tournaments')
-      .select('*')
-      .eq('status', 'active')
-      .order('start_at', { ascending: false })
-      .limit(1);
-    tournament = data && data.length > 0 ? data[0] : null;
+function getTournamentLeaderboard(db: Database.Database) {
+  // Read tournament metadata from tournament.json
+  let tournament: any = null;
+  if (fs.existsSync(TOURNAMENT_FILE)) {
+    try {
+      tournament = JSON.parse(fs.readFileSync(TOURNAMENT_FILE, 'utf8'));
+    } catch { /* ignore parse errors */ }
   }
 
   if (!tournament) {
     return NextResponse.json({ tournament: null, entries: [] });
   }
 
-  const { data: entries } = await supabase
-    .from('trading_tournament_entries')
-    .select('*')
-    .eq('tournament_id', tournament.id)
-    .order('tournament_pnl_usd', { ascending: false });
+  // Get participant bot_ids from tournament
+  const participantIds: number[] = (tournament.participants || []).map((p: any) => p.id);
 
-  return NextResponse.json({
-    tournament,
-    entries: (entries || []).map((e, i) => ({
-      rank: e.rank || i + 1,
+  if (participantIds.length === 0) {
+    return NextResponse.json({ tournament, entries: [] });
+  }
+
+  // Get ELO stats for tournament participants from SQLite
+  const placeholders = participantIds.map(() => '?').join(',');
+  const entries = db.prepare(`
+    SELECT
+      te.bot_id,
+      ab.name AS bot_name,
+      te.elo,
+      te.wins,
+      te.losses,
+      te.draws,
+      te.total_pnl,
+      te.best_trade,
+      te.worst_trade,
+      te.total_trades
+    FROM trading_elo te
+    JOIN api_bots ab ON te.bot_id = ab.id
+    WHERE te.bot_id IN (${placeholders})
+    ORDER BY te.total_pnl DESC
+  `).all(...participantIds) as any[];
+
+  // Build tournament participant map for nfa_id lookup
+  const participantMap = new Map<number, any>();
+  for (const p of (tournament.participants || [])) {
+    participantMap.set(p.id, p);
+  }
+
+  const ranked = entries.map((e: any, i: number) => {
+    const participant = participantMap.get(e.bot_id);
+    return {
+      rank: i + 1,
       bot_id: e.bot_id,
-      nfa_id: e.nfa_id,
+      nfa_id: participant?.nfa_id || null,
       bot_name: e.bot_name,
-      strategy: e.strategy,
-      pnl_usd: e.tournament_pnl_usd,
-      pnl_pct: e.tournament_pnl_pct,
-      trades: e.trades_count,
-      win_rate: e.win_rate,
-      start_pnl_usd: e.start_pnl_usd,
-      current_pnl_usd: e.current_pnl_usd,
-      updated_at: e.updated_at,
-    })),
+      strategy: participant?.trading_style || 'default',
+      pnl_usd: e.total_pnl,
+      pnl_pct: e.total_pnl ? (e.total_pnl / 100) : 0,
+      trades: e.total_trades,
+      win_rate: e.total_trades > 0 ? ((e.wins / e.total_trades) * 100) : 0,
+      elo: e.elo,
+      updated_at: null,
+    };
   });
+
+  return NextResponse.json({ tournament, entries: ranked });
 }
 
-async function getAllTimeLeaderboard() {
-  // Get all bots with their trading stats
-  const { data: bots } = await supabase
-    .from('bots')
-    .select('id, nfa_id, name, trading_mode')
-    .not('nfa_id', 'is', null)
-    .not('trading_mode', 'eq', 'off');
+function getAllTimeLeaderboard(db: Database.Database) {
+  const entries = db.prepare(`
+    SELECT
+      te.bot_id,
+      ab.name AS bot_name,
+      te.elo,
+      te.wins,
+      te.losses,
+      te.draws,
+      te.total_pnl,
+      te.best_trade,
+      te.worst_trade,
+      te.total_trades,
+      te.avg_profit,
+      te.avg_loss
+    FROM trading_elo te
+    JOIN api_bots ab ON te.bot_id = ab.id
+    ORDER BY te.total_pnl DESC
+  `).all() as any[];
 
-  if (!bots || bots.length === 0) {
-    return NextResponse.json({ tournament: null, entries: [] });
-  }
+  const ranked = entries.map((e: any, i: number) => ({
+    rank: i + 1,
+    bot_id: e.bot_id,
+    nfa_id: null,
+    bot_name: e.bot_name,
+    strategy: 'default',
+    pnl_usd: e.total_pnl,
+    pnl_pct: e.total_pnl ? (e.total_pnl / 100) : 0,
+    trades: e.total_trades,
+    win_rate: e.total_trades > 0 ? ((e.wins / e.total_trades) * 100) : 0,
+    elo: e.elo,
+  }));
 
-  const nfaIds = bots.map(b => b.nfa_id).filter(Boolean);
-  const { data: stats } = await supabase
-    .from('nfa_trading_stats')
-    .select('*')
-    .in('nfa_id', nfaIds);
-
-  const statsMap = new Map<number, (typeof stats extends (infer T)[] | null ? T : never)>();
-  if (stats) {
-    for (const s of stats) statsMap.set(s.nfa_id, s);
-  }
-
-  const entries = bots
-    .map(bot => {
-      const s = statsMap.get(bot.nfa_id!);
-      return {
-        bot_id: bot.id,
-        nfa_id: bot.nfa_id,
-        bot_name: bot.name || `NFA #${bot.nfa_id}`,
-        strategy: s?.best_strategy || 'default',
-        pnl_usd: s?.total_pnl_usd || 0,
-        pnl_pct: s?.paper_balance_usd ? ((s.total_pnl_usd || 0) / 10000) * 100 : 0,
-        trades: s?.total_trades || 0,
-        win_rate: s?.win_rate || 0,
-      };
-    })
-    .sort((a, b) => b.pnl_usd - a.pnl_usd)
-    .map((e, i) => ({ ...e, rank: i + 1 }));
-
-  return NextResponse.json({ tournament: null, entries });
+  return NextResponse.json({ tournament: null, entries: ranked });
 }
 
-async function getWeeklyLeaderboard() {
+function getWeeklyLeaderboard(db: Database.Database) {
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Get trades from last 7 days, grouped by bot
-  const { data: trades } = await supabase
-    .from('nfa_trades')
-    .select('bot_id, nfa_id, pnl_usd, status')
-    .gte('open_at', weekAgo)
-    .eq('status', 'closed');
+  // Aggregate PnL from resolved battles in last 7 days, per bot
+  const rows = db.prepare(`
+    SELECT bot_id, bot_name, SUM(pnl) as total_pnl, COUNT(*) as trades,
+           SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins
+    FROM (
+      SELECT bot1_id AS bot_id, ab1.name AS bot_name, bot1_pnl AS pnl
+      FROM trading_battles tb
+      JOIN api_bots ab1 ON tb.bot1_id = ab1.id
+      WHERE tb.status = 'resolved' AND tb.resolved_at >= ?
+      UNION ALL
+      SELECT bot2_id AS bot_id, ab2.name AS bot_name, bot2_pnl AS pnl
+      FROM trading_battles tb
+      JOIN api_bots ab2 ON tb.bot2_id = ab2.id
+      WHERE tb.status = 'resolved' AND tb.resolved_at >= ?
+    ) t
+    GROUP BY bot_id
+    ORDER BY total_pnl DESC
+  `).all(weekAgo, weekAgo) as any[];
 
-  if (!trades || trades.length === 0) {
-    return NextResponse.json({ tournament: null, entries: [] });
-  }
-
-  // Aggregate by bot
-  const botMap = new Map<number, { pnl: number; trades: number; wins: number; nfa_id: number }>();
-  for (const t of trades) {
-    if (!t.bot_id) continue;
-    const existing = botMap.get(t.bot_id) || { pnl: 0, trades: 0, wins: 0, nfa_id: t.nfa_id };
-    existing.pnl += t.pnl_usd || 0;
-    existing.trades += 1;
-    if ((t.pnl_usd || 0) > 0) existing.wins += 1;
-    existing.nfa_id = t.nfa_id;
-    botMap.set(t.bot_id, existing);
-  }
-
-  // Get bot names
-  const botIds = [...botMap.keys()];
-  const { data: bots } = await supabase
-    .from('bots')
-    .select('id, name, nfa_id')
-    .in('id', botIds);
-
-  const nameMap = new Map<number, string>();
-  if (bots) {
-    for (const b of bots) nameMap.set(b.id, b.name || `NFA #${b.nfa_id}`);
-  }
-
-  const entries = [...botMap.entries()]
-    .map(([botId, data]) => ({
-      bot_id: botId,
-      nfa_id: data.nfa_id,
-      bot_name: nameMap.get(botId) || `Bot #${botId}`,
-      strategy: 'default',
-      pnl_usd: data.pnl,
-      pnl_pct: (data.pnl / 10000) * 100,
-      trades: data.trades,
-      win_rate: data.trades > 0 ? (data.wins / data.trades) * 100 : 0,
-    }))
-    .sort((a, b) => b.pnl_usd - a.pnl_usd)
-    .map((e, i) => ({ ...e, rank: i + 1 }));
+  const entries = rows.map((r: any, i: number) => ({
+    rank: i + 1,
+    bot_id: r.bot_id,
+    nfa_id: null,
+    bot_name: r.bot_name,
+    strategy: 'default',
+    pnl_usd: r.total_pnl,
+    pnl_pct: (r.total_pnl / 100),
+    trades: r.trades,
+    win_rate: r.trades > 0 ? ((r.wins / r.trades) * 100) : 0,
+  }));
 
   return NextResponse.json({ tournament: null, entries });
 }
 
-async function getLegacyLeaderboard() {
-  // Original behavior: return all bots with stats
-  const { data: bots, error: botsError } = await supabase
-    .from('bots')
-    .select('id, nfa_id, name, trading_wallet_address, trading_mode')
-    .not('nfa_id', 'is', null)
-    .not('trading_wallet_address', 'is', null)
-    .order('nfa_id', { ascending: true });
+function getLegacyLeaderboard(db: Database.Database) {
+  const bots = db.prepare(`
+    SELECT
+      ab.id,
+      ab.name,
+      ab.wallet_address AS trading_wallet_address,
+      te.elo,
+      te.wins,
+      te.losses,
+      te.draws,
+      te.total_pnl,
+      te.best_trade,
+      te.worst_trade,
+      te.total_trades,
+      te.avg_profit,
+      te.avg_loss
+    FROM api_bots ab
+    LEFT JOIN trading_elo te ON ab.id = te.bot_id
+    ORDER BY te.total_pnl DESC NULLS LAST
+  `).all() as any[];
 
-  if (botsError) {
-    console.error('Leaderboard bots query error:', botsError);
-    return NextResponse.json({ bots: [] });
-  }
-
-  if (!bots || bots.length === 0) {
-    return NextResponse.json({ bots: [] });
-  }
-
-  const nfaIds = bots.map(b => b.nfa_id).filter(Boolean);
-  const { data: allStats } = await supabase
-    .from('nfa_trading_stats')
-    .select('*')
-    .in('nfa_id', nfaIds);
-
-  const statsMap = new Map<number, (typeof allStats extends (infer T)[] | null ? T : never)>();
-  if (allStats) {
-    for (const s of allStats) statsMap.set(s.nfa_id, s);
-  }
-
-  const result = bots.map(bot => ({
+  const result = bots.map((bot: any) => ({
     id: bot.id,
-    nfa_id: bot.nfa_id,
+    nfa_id: null,
     name: bot.name,
     trading_wallet_address: bot.trading_wallet_address,
-    trading_mode: bot.trading_mode || 'off',
-    stats: statsMap.get(bot.nfa_id!) || null,
+    trading_mode: 'paper',
+    stats: bot.total_trades ? {
+      total_pnl_usd: bot.total_pnl,
+      total_trades: bot.total_trades,
+      win_rate: bot.total_trades > 0 ? ((bot.wins / bot.total_trades) * 100) : 0,
+      wins: bot.wins,
+      losses: bot.losses,
+      elo: bot.elo,
+      best_trade: bot.best_trade,
+      worst_trade: bot.worst_trade,
+    } : null,
   }));
 
   return NextResponse.json({ bots: result });

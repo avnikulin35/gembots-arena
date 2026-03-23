@@ -84,8 +84,8 @@ function HPBarFight({ bot, side, aiModel }: { bot: BotState; side: 'left' | 'rig
 
   return (
     <div className={`flex-1 min-w-0 ${side === 'right' ? 'flex flex-col items-end' : ''}`}>
-      {/* Bot name + PnL — fixed min-height for symmetric alignment */}
-      <div className={`flex items-center gap-1 md:gap-2 mb-0.5 min-h-[18px] md:min-h-[22px] ${side === 'right' ? 'flex-row-reverse' : ''}`}>
+      {/* Bot name + AI Model + PnL */}
+      <div className={`flex items-center gap-1 md:gap-2 mb-0.5 ${side === 'right' ? 'flex-row-reverse' : ''}`}>
         <span
           className="font-orbitron text-[10px] md:text-sm font-bold tracking-wider truncate"
           style={{ color: bot.color, textShadow: `0 0 10px ${bot.glowColor}` }}
@@ -97,18 +97,17 @@ function HPBarFight({ bot, side, aiModel }: { bot: BotState; side: 'left' | 'rig
             NFA #{bot.nfa_id}
           </a>
         )}
-        <span className={`font-mono text-[10px] md:text-xs font-semibold whitespace-nowrap ${bot.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+        <span className={`font-mono text-[10px] md:text-xs font-semibold ${bot.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
           {bot.totalPnl >= 0 ? '+' : ''}{bot.totalPnl.toFixed(1)}%
         </span>
       </div>
-      {/* AI model — always reserve space even if empty for alignment */}
-      <div className={`mb-0.5 min-h-[14px] md:min-h-[18px] ${side === 'right' ? 'text-right' : 'text-left'}`}>
-        {aiModel && (
+      {aiModel && (
+        <div className={`mb-0.5 ${side === 'right' ? 'text-right' : 'text-left'}`}>
           <span className="text-[9px] md:text-xs text-purple-400/80 font-mono">
             🤖 {aiModel}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* HP bar container */}
       <div className="relative w-full h-4 md:h-7 rounded-sm overflow-hidden border border-white/10 bg-gray-900/80">

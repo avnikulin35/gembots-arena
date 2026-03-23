@@ -27,12 +27,10 @@ interface SafetyCheckResult {
 }
 
 // Helper to fetch price data from Supabase
-// Volume is fetched from token_prices.volume column (nullable — null means no data).
-// If the column doesn't exist in older records, falls back to 0 gracefully.
 async function fetchPriceHistoryFromDb(tokenMint: string, minutes: number): Promise<PriceData[]> {
   const { data, error } = await supabase
     .from('token_prices')
-    .select('timestamp, price, volume') // volume column added 2026-03-22
+    .select('timestamp, price') // Assuming volume is not directly in token_prices, will need to adapt
     .eq('mint', tokenMint)
     .gte('timestamp', new Date(Date.now() - minutes * 60 * 1000).toISOString())
     .order('timestamp', { ascending: true });
@@ -42,11 +40,11 @@ async function fetchPriceHistoryFromDb(tokenMint: string, minutes: number): Prom
     return [];
   }
 
+  // Placeholder for volume, actual volume would come from a more detailed price worker
   return data.map((item: any) => ({
     timestamp: item.timestamp,
     price: item.price,
-    // Use real volume if present; null means data not collected yet for that candle
-    volume: typeof item.volume === 'number' ? item.volume : 0,
+    volume: 0, // TODO: Integrate actual volume if available
   }));
 }
 

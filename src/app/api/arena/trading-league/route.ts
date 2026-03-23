@@ -55,7 +55,7 @@ export async function GET() {
         ab.name
       FROM trading_elo t
       JOIN api_bots ab ON t.bot_id = ab.id
-      ORDER BY t.elo DESC
+      ORDER BY t.total_pnl DESC
       LIMIT 20;
     `);
     const leaderboard: TradingElo[] = leaderboardQuery.all() as TradingElo[];
@@ -137,7 +137,7 @@ export async function GET() {
         SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) as wins,
         SUM(CASE WHEN won=0 AND draw=0 THEN 1 ELSE 0 END) as losses,
         SUM(CASE WHEN draw=1 THEN 1 ELSE 0 END) as draws,
-        ROUND(CASE WHEN (SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) + SUM(CASE WHEN won=0 AND draw=0 THEN 1 ELSE 0 END)) > 0 THEN 100.0 * SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) / (SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) + SUM(CASE WHEN won=0 AND draw=0 THEN 1 ELSE 0 END)) ELSE 0 END, 1) as win_rate,
+        ROUND(100.0 * SUM(CASE WHEN won=1 THEN 1 ELSE 0 END) / COUNT(*), 1) as win_rate,
         ROUND(AVG(pnl), 4) as avg_pnl,
         ROUND(SUM(pnl), 2) as total_pnl,
         ROUND(MAX(pnl), 2) as best_trade,
@@ -154,7 +154,7 @@ export async function GET() {
         FROM trading_battles WHERE status='resolved' AND bot2_model IS NOT NULL
       ) t
       GROUP BY model
-      ORDER BY win_rate DESC, total_pnl DESC;
+      ORDER BY total_pnl DESC, win_rate DESC;
     `);
     const modelLeaderboard = modelLeaderboardQuery.all();
 

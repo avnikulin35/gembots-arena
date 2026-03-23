@@ -1,20 +1,23 @@
 #!/usr/bin/env node
 
 /**
- * GemBots Trading League Tournament Engine
+ * GemBots Trading League Tournament Engine v2.0
+ * 
+ * Source of truth: SQLite (trading_elo, trading_battles, api_bots) + data/tournament.json
+ * No Supabase dependency for paper trading.
  * 
  * PM2 service that manages weekly trading tournaments:
- * 1. Starts a new tournament automatically (immediately on first run, then weekly Mon 00:00 UTC)
+ * 1. Starts a new tournament automatically (Mon 00:00 UTC)
  * 2. Snapshots current PnL of all active bots as baseline
- * 3. Every hour updates tournament entries with current PnL vs baseline
- * 4. When tournament ends: final snapshot, determine Top-3, start new tournament
- * 
- * Tournament naming: "Trading League Week #N" (ISO week number)
+ * 3. Every hour updates tournament.json with current standings
+ * 4. When tournament ends: finalize, log results, start new tournament
  */
 
-// ─── Load .env.local ─────────────────────────────────────────────────────────
 const fs = require('fs');
 const path = require('path');
+const Database = require('better-sqlite3');
+
+// ─── Load .env.local ─────────────────────────────────────────────────────────
 const envPath = path.join(__dirname, '..', '.env.local');
 if (fs.existsSync(envPath)) {
   fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
@@ -31,34 +34,18 @@ if (fs.existsSync(envPath)) {
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const DB_PATH = path.join(__dirname, '..', 'data', 'gembots.db');
+const TOURNAMENT_FILE = path.join(__dirname, '..', 'data', 'tournament.json');
+const TOURNAMENT_HISTORY_DIR = path.join(__dirname, '..', 'data', 'tournament-history');
 
 const HOURLY_UPDATE_MS = 60 * 60 * 1000;     // 1 hour
-const CHECK_INTERVAL_MS = 5 * 60 * 1000;     // Check every 5 min if tournament needs action
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;     // Check every 5 min
 const STARTUP_DELAY_MS = 5_000;               // 5s startup delay
 
-// ─── Supabase Helper ─────────────────────────────────────────────────────────
+// ─── SQLite Helper ───────────────────────────────────────────────────────────
 
-async function supabaseRequest(path, options = {}) {
-  const url = `${SUPABASE_URL}/rest/v1/${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': options.prefer || 'return=representation',
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Supabase ${res.status}: ${text}`);
-  }
-  const ct = res.headers.get('content-type');
-  if (ct && ct.includes('json')) return res.json();
-  return null;
+function getDb() {
+  return new Database(DB_PATH, { readonly: true });
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -71,14 +58,12 @@ function getISOWeekNumber(date = new Date()) {
 }
 
 function getWeekBounds(now = new Date()) {
-  // Monday 00:00 UTC of this week
-  const day = now.getUTCDay(); // 0=Sun, 1=Mon, ...
+  const day = now.getUTCDay();
   const mondayOffset = day === 0 ? -6 : 1 - day;
   const monday = new Date(now);
   monday.setUTCDate(now.getUTCDate() + mondayOffset);
   monday.setUTCHours(0, 0, 0, 0);
 
-  // Sunday 23:59:59.999 UTC
   const sunday = new Date(monday);
   sunday.setUTCDate(monday.getUTCDate() + 6);
   sunday.setUTCHours(23, 59, 59, 999);
@@ -90,381 +75,291 @@ function log(msg) {
   console.log(`[${new Date().toISOString()}] [TOURNAMENT] ${msg}`);
 }
 
+function loadTournament() {
+  if (!fs.existsSync(TOURNAMENT_FILE)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(TOURNAMENT_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function saveTournament(tournament) {
+  fs.writeFileSync(TOURNAMENT_FILE, JSON.stringify(tournament, null, 2));
+}
+
+function archiveTournament(tournament) {
+  if (!fs.existsSync(TOURNAMENT_HISTORY_DIR)) {
+    fs.mkdirSync(TOURNAMENT_HISTORY_DIR, { recursive: true });
+  }
+  const filename = `tournament-${tournament.id}.json`;
+  fs.writeFileSync(path.join(TOURNAMENT_HISTORY_DIR, filename), JSON.stringify(tournament, null, 2));
+  log(`Archived tournament to ${filename}`);
+}
+
 // ─── Core Functions ──────────────────────────────────────────────────────────
 
 /**
- * Get all bots that are actively trading (trading_mode != 'off')
- * Note: nfa_id in bots table may be null (not minted on-chain yet),
- * but they still trade. We use bot.id as a fallback nfa_id for tournament entries.
+ * Get all bots from SQLite that have trading_elo entries (i.e., have participated in battles)
  */
-async function getActiveTradingBots() {
-  const bots = await supabaseRequest(
-    'bots?select=id,name,nfa_id,trading_mode,trading_config&trading_mode=neq.off'
-  );
-  return bots || [];
+function getActiveTradingBots() {
+  const db = getDb();
+  try {
+    const bots = db.prepare(`
+      SELECT ab.id, ab.name, ab.wallet_address,
+             te.elo, te.total_pnl, te.total_trades, te.wins, te.losses, te.draws,
+             te.best_trade, te.worst_trade
+      FROM api_bots ab
+      JOIN trading_elo te ON ab.id = te.bot_id
+      WHERE te.total_trades > 0
+      ORDER BY te.total_pnl DESC
+    `).all();
+    return bots;
+  } finally {
+    db.close();
+  }
 }
 
 /**
- * Get trading stats for a list of NFA IDs
- * Note: In the paper trading engine, nfa_id in nfa_trading_stats
- * may match bot.id (when bot has no on-chain NFA)
+ * Get bot stats from SQLite trading_elo
  */
-async function getTradingStats(nfaIds) {
-  if (!nfaIds.length) return [];
-  const ids = nfaIds.join(',');
-  const stats = await supabaseRequest(
-    `nfa_trading_stats?nfa_id=in.(${ids})`
-  );
-  return stats || [];
+function getBotStats(botIds) {
+  if (!botIds.length) return new Map();
+  const db = getDb();
+  try {
+    const placeholders = botIds.map(() => '?').join(',');
+    const rows = db.prepare(`
+      SELECT bot_id, elo, total_pnl, total_trades, wins, losses, draws, best_trade, worst_trade
+      FROM trading_elo
+      WHERE bot_id IN (${placeholders})
+    `).all(...botIds);
+    
+    const map = new Map();
+    for (const r of rows) map.set(r.bot_id, r);
+    return map;
+  } finally {
+    db.close();
+  }
 }
 
 /**
- * Get trade count for a bot during a specific time period
+ * Get battle stats for a bot during a time period (from trading_battles)
  */
-async function getTradesInPeriod(botId, startAt, endAt) {
-  // Ensure proper ISO format for timestamps
-  const start = new Date(startAt).toISOString();
-  const end = new Date(endAt).toISOString();
-  const trades = await supabaseRequest(
-    `nfa_trades?bot_id=eq.${botId}&open_at=gte.${encodeURIComponent(start)}&open_at=lte.${encodeURIComponent(end)}&select=id,pnl_usd,status`
-  );
-  if (!trades || trades.length === 0) return { count: 0, wins: 0, pnl: 0 };
+function getBattleStatsInPeriod(botId, startAt) {
+  const db = getDb();
+  try {
+    const row = db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
+        SUM(pnl) as total_pnl
+      FROM (
+        SELECT bot1_pnl AS pnl FROM trading_battles 
+        WHERE bot1_id = ? AND status = 'resolved' AND resolved_at >= ?
+        UNION ALL
+        SELECT bot2_pnl AS pnl FROM trading_battles 
+        WHERE bot2_id = ? AND status = 'resolved' AND resolved_at >= ?
+      ) t
+    `).get(botId, startAt, botId, startAt);
+    
+    return {
+      count: row?.total || 0,
+      wins: row?.wins || 0,
+      pnl: row?.total_pnl || 0,
+      winRate: row?.total > 0 ? (row.wins / row.total) * 100 : 0,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Create a new tournament — saves to tournament.json
+ */
+function createTournament(name, startAt, endAt) {
+  const bots = getActiveTradingBots();
+  const statsMap = getBotStats(bots.map(b => b.id));
   
-  const closed = trades.filter(t => t.status === 'closed');
-  const wins = closed.filter(t => (t.pnl_usd || 0) > 0).length;
-  const pnl = closed.reduce((sum, t) => sum + (t.pnl_usd || 0), 0);
-  
-  return { count: trades.length, wins, pnl, winRate: closed.length > 0 ? (wins / closed.length) * 100 : 0 };
-}
-
-/**
- * Get the current active tournament (if any)
- */
-async function getActiveTournament() {
-  const tournaments = await supabaseRequest(
-    'trading_tournaments?status=eq.active&order=start_at.desc&limit=1'
-  );
-  return tournaments && tournaments.length > 0 ? tournaments[0] : null;
-}
-
-/**
- * Create a new tournament
- */
-async function createTournament(name, startAt, endAt) {
-  log(`Creating tournament: "${name}" (${startAt.toISOString()} → ${endAt.toISOString()})`);
-  
-  const result = await supabaseRequest('trading_tournaments', {
-    method: 'POST',
-    body: JSON.stringify({
-      name,
-      status: 'active',
-      start_at: startAt.toISOString(),
-      end_at: endAt.toISOString(),
-      total_participants: 0,
-      prize_pool_usd: 0,
-    }),
+  const participants = bots.map(bot => {
+    const stats = statsMap.get(bot.id);
+    return {
+      id: bot.id,
+      name: bot.name,
+      nfa_id: null,
+      ai_model: null,
+      trading_style: 'default',
+      snapshot_pnl: stats?.total_pnl || 0,   // PnL at tournament start
+      snapshot_trades: stats?.total_trades || 0,
+      snapshot_elo: stats?.elo || 1500,
+    };
   });
+
+  const tournament = {
+    id: `weekly-${getISOWeekNumber(startAt)}-${Date.now()}`,
+    name,
+    status: 'active',
+    start_at: startAt.toISOString(),
+    end_at: endAt.toISOString(),
+    created_at: new Date().toISOString(),
+    total_participants: participants.length,
+    participants,
+    standings: [],
+    last_updated: new Date().toISOString(),
+  };
   
-  const tournament = Array.isArray(result) ? result[0] : result;
-  log(`Tournament created: ID=${tournament.id}`);
+  saveTournament(tournament);
+  log(`Tournament created: "${name}" with ${participants.length} bots (${startAt.toISOString()} → ${endAt.toISOString()})`);
   return tournament;
 }
 
 /**
- * Snapshot current PnL and create entries for all active bots
+ * Update tournament standings from SQLite
  */
-async function snapshotAndCreateEntries(tournament) {
-  const bots = await getActiveTradingBots();
-  if (bots.length === 0) {
-    log('No active trading bots found for tournament');
-    return;
+function updateStandings(tournament) {
+  const botIds = tournament.participants.map(p => p.id);
+  const statsMap = getBotStats(botIds);
+  
+  // Build participant snapshot map
+  const snapshotMap = new Map();
+  for (const p of tournament.participants) {
+    snapshotMap.set(p.id, p);
   }
   
-  // Use bot.nfa_id if set, otherwise use bot.id as the effective nfa_id
-  // (paper trading engine stores bot.id as nfa_id in trades/stats when no on-chain NFA)
-  const effectiveNfaIds = bots.map(b => b.nfa_id || b.id).filter(Boolean);
-  const stats = await getTradingStats(effectiveNfaIds);
-  const statsMap = new Map();
-  for (const s of stats) {
-    statsMap.set(s.nfa_id, s);
-  }
-  
-  const entries = [];
-  for (const bot of bots) {
-    const effectiveNfaId = bot.nfa_id || bot.id;
-    const botStats = statsMap.get(effectiveNfaId);
-    const currentPnl = botStats?.total_pnl_usd || 0;
+  const standings = [];
+  for (const p of tournament.participants) {
+    const stats = statsMap.get(p.id);
+    const currentPnl = stats?.total_pnl || 0;
+    const snapshotPnl = p.snapshot_pnl || 0;
+    const tournamentPnl = currentPnl - snapshotPnl;
     
-    // Parse strategy from trading_config
-    let strategy = 'unknown';
-    try {
-      const config = typeof bot.trading_config === 'string' ? JSON.parse(bot.trading_config) : bot.trading_config;
-      strategy = config?.strategy || config?.strategy_name || 'default';
-    } catch { }
+    // Get battle stats during tournament period
+    const battleStats = getBattleStatsInPeriod(p.id, tournament.start_at);
     
-    entries.push({
-      tournament_id: tournament.id,
-      bot_id: bot.id,
-      nfa_id: effectiveNfaId,
-      bot_name: bot.name || `Bot #${bot.id}`,
-      strategy,
-      start_pnl_usd: currentPnl,
-      current_pnl_usd: currentPnl,
-      tournament_pnl_usd: 0,
-      tournament_pnl_pct: 0,
-      trades_count: 0,
-      win_rate: 0,
-      rank: null,
+    standings.push({
+      bot_id: p.id,
+      bot_name: p.name,
+      snapshot_pnl: snapshotPnl,
+      current_pnl: currentPnl,
+      tournament_pnl: tournamentPnl,
+      tournament_pnl_pct: snapshotPnl !== 0 ? (tournamentPnl / Math.abs(snapshotPnl)) * 100 : 0,
+      trades_count: battleStats.count,
+      wins: battleStats.wins,
+      win_rate: battleStats.winRate,
+      elo: stats?.elo || 1500,
     });
   }
   
-  if (entries.length > 0) {
-    await supabaseRequest('trading_tournament_entries', {
-      method: 'POST',
-      body: JSON.stringify(entries),
-      prefer: 'return=minimal',
-    });
-    
-    // Update participant count
-    await supabaseRequest(`trading_tournaments?id=eq.${tournament.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ total_participants: entries.length }),
-    });
-    
-    log(`Created ${entries.length} tournament entries for tournament ${tournament.id}`);
-  }
+  // Sort by tournament PnL
+  standings.sort((a, b) => b.tournament_pnl - a.tournament_pnl);
+  standings.forEach((s, i) => { s.rank = i + 1; });
+  
+  tournament.standings = standings;
+  tournament.last_updated = new Date().toISOString();
+  saveTournament(tournament);
+  
+  const top = standings[0];
+  log(`Updated ${standings.length} entries (top: ${top?.bot_name} $${top?.tournament_pnl?.toFixed(2) || '0'}, ${standings.length} bots total)`);
 }
 
 /**
- * Hourly update: refresh PnL for all tournament entries
+ * Enroll new bots that started trading after tournament began
  */
-async function updateTournamentEntries(tournament) {
-  // Always try to enroll new bots first
-  await enrollNewBots(tournament);
-  
-  const entries = await supabaseRequest(
-    `trading_tournament_entries?tournament_id=eq.${tournament.id}&select=*`
-  );
-  
-  if (!entries || entries.length === 0) return;
-  
-  // Get current stats for all participating bots
-  const nfaIds = entries.map(e => e.nfa_id).filter(Boolean);
-  const stats = nfaIds.length > 0 ? await getTradingStats(nfaIds) : [];
-  const statsMap = new Map();
-  for (const s of stats) {
-    statsMap.set(s.nfa_id, s);
-  }
-  
-  // Update each entry
-  const updates = [];
-  for (const entry of entries) {
-    const botStats = statsMap.get(entry.nfa_id);
-    const currentPnl = botStats?.total_pnl_usd || 0;
-    const tournamentPnl = currentPnl - (entry.start_pnl_usd || 0);
-    const startBalance = 10000; // Default paper balance
-    const tournamentPnlPct = startBalance > 0 ? (tournamentPnl / startBalance) * 100 : 0;
-    
-    // Get trades during tournament period
-    const tradeData = await getTradesInPeriod(
-      entry.bot_id,
-      tournament.start_at,
-      new Date().toISOString()
-    );
-    
-    updates.push({
-      id: entry.id,
-      current_pnl_usd: currentPnl,
-      tournament_pnl_usd: tournamentPnl,
-      tournament_pnl_pct: tournamentPnlPct,
-      trades_count: tradeData.count,
-      win_rate: tradeData.winRate,
-      updated_at: new Date().toISOString(),
-    });
-  }
-  
-  // Sort by tournament PnL for ranking
-  updates.sort((a, b) => b.tournament_pnl_usd - a.tournament_pnl_usd);
-  updates.forEach((u, i) => { u.rank = i + 1; });
-  
-  // Batch update entries
-  for (const update of updates) {
-    await supabaseRequest(`trading_tournament_entries?id=eq.${update.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        current_pnl_usd: update.current_pnl_usd,
-        tournament_pnl_usd: update.tournament_pnl_usd,
-        tournament_pnl_pct: update.tournament_pnl_pct,
-        trades_count: update.trades_count,
-        win_rate: update.win_rate,
-        rank: update.rank,
-        updated_at: update.updated_at,
-      }),
-    });
-  }
-  
-  log(`Updated ${updates.length} entries for tournament ${tournament.id} (top PnL: $${updates[0]?.tournament_pnl_usd?.toFixed(2) || '0'})`);
-}
-
-/**
- * Enroll bots that became active after tournament started
- */
-async function enrollNewBots(tournament) {
-  const activeBots = await getActiveTradingBots();
-  const existingEntries = await supabaseRequest(
-    `trading_tournament_entries?tournament_id=eq.${tournament.id}&select=bot_id`
-  );
-  
-  const enrolledBotIds = new Set((existingEntries || []).map(e => e.bot_id));
-  const newBots = activeBots.filter(b => !enrolledBotIds.has(b.id));
+function enrollNewBots(tournament) {
+  const allBots = getActiveTradingBots();
+  const enrolledIds = new Set(tournament.participants.map(p => p.id));
+  const newBots = allBots.filter(b => !enrolledIds.has(b.id));
   
   if (newBots.length === 0) return;
   
-  const effectiveNfaIds = newBots.map(b => b.nfa_id || b.id).filter(Boolean);
-  const stats = effectiveNfaIds.length > 0 ? await getTradingStats(effectiveNfaIds) : [];
-  const statsMap = new Map();
-  for (const s of stats) {
-    statsMap.set(s.nfa_id, s);
+  const statsMap = getBotStats(newBots.map(b => b.id));
+  
+  for (const bot of newBots) {
+    const stats = statsMap.get(bot.id);
+    tournament.participants.push({
+      id: bot.id,
+      name: bot.name,
+      nfa_id: null,
+      ai_model: null,
+      trading_style: 'default',
+      snapshot_pnl: stats?.total_pnl || 0,
+      snapshot_trades: stats?.total_trades || 0,
+      snapshot_elo: stats?.elo || 1500,
+    });
   }
   
-  const entries = newBots.map(bot => {
-    const effectiveNfaId = bot.nfa_id || bot.id;
-    const botStats = statsMap.get(effectiveNfaId);
-    let strategy = 'unknown';
-    try {
-      const config = typeof bot.trading_config === 'string' ? JSON.parse(bot.trading_config) : bot.trading_config;
-      strategy = config?.strategy || config?.strategy_name || 'default';
-    } catch { }
-    
-    return {
-      tournament_id: tournament.id,
-      bot_id: bot.id,
-      nfa_id: effectiveNfaId,
-      bot_name: bot.name || `Bot #${bot.id}`,
-      strategy,
-      start_pnl_usd: botStats?.total_pnl_usd || 0,
-      current_pnl_usd: botStats?.total_pnl_usd || 0,
-      tournament_pnl_usd: 0,
-      tournament_pnl_pct: 0,
-      trades_count: 0,
-      win_rate: 0,
-      rank: null,
-    };
-  });
-  
-  if (entries.length > 0) {
-    await supabaseRequest('trading_tournament_entries', {
-      method: 'POST',
-      body: JSON.stringify(entries),
-      prefer: 'return=minimal',
-    });
-    
-    // Update total participants
-    const totalEntries = await supabaseRequest(
-      `trading_tournament_entries?tournament_id=eq.${tournament.id}&select=id`,
-      { headers: { 'Prefer': 'count=exact' } }
-    );
-    const count = Array.isArray(totalEntries) ? totalEntries.length : 0;
-    
-    await supabaseRequest(`trading_tournaments?id=eq.${tournament.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ total_participants: count }),
-    });
-    
-    log(`Enrolled ${entries.length} new bots into tournament ${tournament.id}`);
-  }
+  tournament.total_participants = tournament.participants.length;
+  log(`Enrolled ${newBots.length} new bots (total: ${tournament.total_participants})`);
 }
 
 /**
- * Finalize a tournament: set final rankings, mark as completed
+ * Finalize tournament
  */
-async function finalizeTournament(tournament) {
-  log(`Finalizing tournament: "${tournament.name}" (ID=${tournament.id})`);
+function finalizeTournament(tournament) {
+  log(`Finalizing: "${tournament.name}"`);
   
-  // Final update of entries
-  await updateTournamentEntries(tournament);
+  // Final standings update
+  enrollNewBots(tournament);
+  updateStandings(tournament);
   
-  // Get final entries sorted by PnL
-  const entries = await supabaseRequest(
-    `trading_tournament_entries?tournament_id=eq.${tournament.id}&order=tournament_pnl_usd.desc`
-  );
+  const standings = tournament.standings || [];
+  const top3 = standings.slice(0, 3);
+  const medals = ['🥇', '🥈', '🥉'];
   
-  if (entries && entries.length > 0) {
-    const top3 = entries.slice(0, 3);
-    log(`🏆 Tournament "${tournament.name}" Results:`);
-    top3.forEach((e, i) => {
-      const medals = ['🥇', '🥈', '🥉'];
-      log(`  ${medals[i]} #${i + 1}: ${e.bot_name} — $${e.tournament_pnl_usd?.toFixed(2)} (${e.trades_count} trades, ${e.win_rate?.toFixed(1)}% WR)`);
-    });
-  }
-  
-  // Mark tournament as completed
-  await supabaseRequest(`trading_tournaments?id=eq.${tournament.id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status: 'completed' }),
+  log(`🏆 Tournament "${tournament.name}" Results:`);
+  top3.forEach((s, i) => {
+    log(`  ${medals[i]} #${i + 1}: ${s.bot_name} — $${s.tournament_pnl?.toFixed(2)} (${s.trades_count} battles, ${s.win_rate?.toFixed(1)}% WR, ELO ${s.elo?.toFixed(0)})`);
   });
   
-  log(`Tournament ${tournament.id} completed.`);
+  tournament.status = 'finished';
+  tournament.finished_at = new Date().toISOString();
+  saveTournament(tournament);
+  archiveTournament(tournament);
+  
+  log(`Tournament "${tournament.name}" completed.`);
 }
 
 /**
- * Start a new tournament for the current week
+ * Start new tournament for current week
  */
-async function startNewTournament() {
+function startNewTournament() {
   const now = new Date();
   const weekNum = getISOWeekNumber(now);
   const { start, end } = getWeekBounds(now);
-  
   const name = `Trading League Week #${weekNum}`;
   
-  // Check if a tournament for this week already exists
-  const existing = await supabaseRequest(
-    `trading_tournaments?name=eq.${encodeURIComponent(name)}&limit=1`
-  );
-  
-  if (existing && existing.length > 0) {
-    log(`Tournament "${name}" already exists (ID=${existing[0].id}, status=${existing[0].status})`);
-    if (existing[0].status === 'active') return existing[0];
-    // If completed, we'll create one with a different suffix
-  }
-  
-  const tournament = await createTournament(name, start, end);
-  await snapshotAndCreateEntries(tournament);
-  return tournament;
+  return createTournament(name, start, end);
 }
 
 // ─── Main Loop ───────────────────────────────────────────────────────────────
 
 let lastHourlyUpdate = 0;
 
-async function tick() {
+function tick() {
   try {
     const now = new Date();
+    let tournament = loadTournament();
     
-    // 1. Check for active tournament
-    let tournament = await getActiveTournament();
-    
-    // 2. If no active tournament → start one
-    if (!tournament) {
-      log('No active tournament found. Starting new tournament...');
-      tournament = await startNewTournament();
+    // 1. No tournament or finished → start new one
+    if (!tournament || tournament.status === 'finished') {
+      log('No active tournament. Starting new...');
+      tournament = startNewTournament();
       lastHourlyUpdate = Date.now();
       return;
     }
     
-    // 3. Check if tournament has ended
-    const endAt = new Date(tournament.end_at);
-    if (now >= endAt) {
-      await finalizeTournament(tournament);
+    // 2. Tournament ended? → finalize + start new
+    if (tournament.end_at && now >= new Date(tournament.end_at)) {
+      finalizeTournament(tournament);
       log('Starting next tournament...');
-      await startNewTournament();
+      startNewTournament();
       lastHourlyUpdate = Date.now();
       return;
     }
     
-    // 4. Hourly update
+    // 3. Hourly update
     if (Date.now() - lastHourlyUpdate >= HOURLY_UPDATE_MS) {
-      await updateTournamentEntries(tournament);
+      enrollNewBots(tournament);
+      updateStandings(tournament);
       lastHourlyUpdate = Date.now();
     }
     
@@ -476,27 +371,22 @@ async function tick() {
 
 // ─── Startup ─────────────────────────────────────────────────────────────────
 
-async function main() {
+function main() {
   log('═══════════════════════════════════════════════════');
-  log('  GemBots Trading League Tournament Engine v1.0');
+  log('  GemBots Trading League Tournament Engine v2.0');
+  log('  Source of truth: SQLite + tournament.json');
   log('═══════════════════════════════════════════════════');
-  log(`Supabase: ${SUPABASE_URL}`);
+  log(`DB: ${DB_PATH}`);
+  log(`Tournament file: ${TOURNAMENT_FILE}`);
   log(`Check interval: ${CHECK_INTERVAL_MS / 1000}s`);
   log(`Hourly update interval: ${HOURLY_UPDATE_MS / 1000}s`);
   
   // Startup delay
-  await new Promise(r => setTimeout(r, STARTUP_DELAY_MS));
-  
-  // Initial tick
-  await tick();
-  
-  // Continuous loop
-  setInterval(tick, CHECK_INTERVAL_MS);
-  
-  log('Tournament engine running. Press Ctrl+C to stop.');
+  setTimeout(() => {
+    tick();
+    setInterval(tick, CHECK_INTERVAL_MS);
+    log('Tournament engine running. Press Ctrl+C to stop.');
+  }, STARTUP_DELAY_MS);
 }
 
-main().catch(err => {
-  console.error('FATAL:', err);
-  process.exit(1);
-});
+main();

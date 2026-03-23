@@ -1,22 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
+
+export const dynamic = 'force-dynamic';
+
+const DB_PATH = path.join(process.cwd(), 'data/gembots.db');
+const TOURNAMENT_FILE = path.join(process.cwd(), 'data', 'tournament.json');
 
 /**
  * GET /api/nfa/trading/analytics
- * 
- * Returns aggregated platform stats:
- *   - totalRevenueBnb, totalRevenueUsd
- *   - totalTrades, totalVolumeBnb, totalVolumeUsd
- *   - activeTraders
- *   - avgTradeSize
- *   - tournamentsCompleted, avgParticipants, totalPrizeDistributed
+ *
+ * Returns aggregated platform stats.
+ * Revenue/commissions: Supabase (real money).
+ * Trading stats/active traders/tournament counts: SQLite (paper-trading source of truth).
  */
 export async function GET(request: NextRequest) {
+  let sqliteDb: Database.Database | null = null;
   try {
     const { searchParams } = new URL(request.url);
     const nfaId = searchParams.get('nfaId');
 
-    // ─── Per-bot commission summary ───
+    // ─── Per-bot commission summary (Supabase — real money) ───
     if (nfaId) {
       const { data: commissions } = await supabase
         .from('trading_commissions')
@@ -41,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     // ─── Platform-wide analytics ───
 
-    // Revenue from platform_revenue table
+    // Revenue from Supabase (real money tracking)
     const { data: revenueData } = await supabase
       .from('platform_revenue')
       .select('*')
@@ -49,31 +55,44 @@ export async function GET(request: NextRequest) {
 
     const totalRevenueBnb = (revenueData || []).reduce((s, r) => s + (r.total_commissions_bnb || 0), 0);
     const totalRevenueUsd = (revenueData || []).reduce((s, r) => s + (r.total_commissions_usd || 0), 0);
-    const totalTrades = (revenueData || []).reduce((s, r) => s + (r.trade_count || 0), 0);
     const totalVolumeBnb = (revenueData || []).reduce((s, r) => s + (r.trade_volume_bnb || 0), 0);
     const totalVolumeUsd = (revenueData || []).reduce((s, r) => s + (r.trade_volume_usd || 0), 0);
 
-    // Active traders: distinct nfa_ids with trades
-    const { data: tradersData } = await supabase
-      .from('nfa_trading_stats')
-      .select('nfa_id')
-      .gt('total_trades', 0);
-    const activeTraders = tradersData?.length || 0;
+    // Trading stats from SQLite (source of truth for paper-trading)
+    sqliteDb = new Database(DB_PATH, { readonly: true });
 
-    // Average trade size
+    const battleStats = sqliteDb.prepare(`
+      SELECT
+        COUNT(*) as total_battles,
+        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved_battles
+      FROM trading_battles
+    `).get() as { total_battles: number; resolved_battles: number };
+
+    const totalTrades = battleStats.resolved_battles * 2; // Each battle has 2 participants
+
+    const activeTraderStats = sqliteDb.prepare(`
+      SELECT COUNT(*) as count FROM trading_elo WHERE total_trades > 0
+    `).get() as { count: number };
+    const activeTraders = activeTraderStats.count;
+
     const avgTradeSize = totalTrades > 0 ? totalVolumeUsd / totalTrades : 0;
 
-    // Tournament stats
-    const { data: tournaments } = await supabase
-      .from('trading_tournaments')
-      .select('id, status, total_participants, prize_pool_usd');
-    
-    const completedTournaments = (tournaments || []).filter(t => t.status === 'completed');
-    const tournamentsCompleted = completedTournaments.length;
-    const avgParticipants = tournamentsCompleted > 0
-      ? completedTournaments.reduce((s, t) => s + (t.total_participants || 0), 0) / tournamentsCompleted
-      : (tournaments || []).reduce((s, t) => s + (t.total_participants || 0), 0) / Math.max(1, (tournaments || []).length);
-    const totalPrizeDistributed = completedTournaments.reduce((s, t) => s + (t.prize_pool_usd || 0), 0);
+    // Tournament stats from tournament.json
+    let tournamentsCompleted = 0;
+    let avgParticipants = 0;
+    let totalTournamentsRun = 0;
+    const totalPrizeDistributed = 0;
+
+    if (fs.existsSync(TOURNAMENT_FILE)) {
+      try {
+        const tournament = JSON.parse(fs.readFileSync(TOURNAMENT_FILE, 'utf8'));
+        if (tournament) {
+          totalTournamentsRun = parseInt(tournament.name?.match(/#(\d+)/)?.[1] || '1');
+          tournamentsCompleted = tournament.status === 'finished' ? totalTournamentsRun : totalTournamentsRun - 1;
+          avgParticipants = (tournament.participants || []).length;
+        }
+      } catch { /* ignore */ }
+    }
 
     return NextResponse.json({
       totalRevenueBnb: parseFloat(totalRevenueBnb.toFixed(6)),
@@ -84,7 +103,7 @@ export async function GET(request: NextRequest) {
       activeTraders,
       avgTradeSize: parseFloat(avgTradeSize.toFixed(2)),
       tournamentsCompleted,
-      totalTournamentsRun: (tournaments || []).length,
+      totalTournamentsRun,
       avgParticipants: parseFloat(avgParticipants.toFixed(1)),
       totalPrizeDistributed: parseFloat(totalPrizeDistributed.toFixed(2)),
       daysTracked: (revenueData || []).length,
@@ -92,5 +111,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error('GET /api/nfa/trading/analytics error:', err);
     return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 });
+  } finally {
+    sqliteDb?.close();
   }
 }

@@ -300,7 +300,7 @@ function TradingLeagueTab({ data, portfolios }: { data: TradingLeagueData | null
                       {typeof balance === 'number' ? currencyFormatter.format(balance) : '-'}
                     </td>
                     <td className={`px-4 py-4 text-right font-mono font-bold text-lg ${bot.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {bot.total_pnl >= 0 ? '+' : ''}{bot.total_pnl.toFixed(2)}%
+                      {bot.total_pnl >= 0 ? '+' : ''}{bot.total_pnl.toFixed(3)}%
                     </td>
                     <td className="px-4 py-4 text-right font-mono text-[#F0B90B]">{bot.elo.toFixed(0)}</td>
                     <td className="px-4 py-4 text-right text-green-400">{bot.wins}</td>
