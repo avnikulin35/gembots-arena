@@ -289,12 +289,90 @@ Market data for ${snapshot.symbol}:
 - Volume 24h: $${(snapshot.volume_24h / 1e6)?.toFixed(1)}M
 - RSI-14: ${snapshot.rsi_14}
 - EMA9: ${snapshot.ema_9?.toFixed(2)}, EMA21: ${snapshot.ema_21?.toFixed(2)}
+- MACD: ${snapshot.macd?.toFixed?.(4) || snapshot.macd || 'N/A'}, Signal: ${snapshot.macd_signal?.toFixed?.(4) || snapshot.macd_signal || 'N/A'}
+- Funding Rate: ${snapshot.funding_rate?.toFixed?.(6) || snapshot.funding_rate || 'N/A'}
+- Orderbook Imbalance: ${snapshot.orderbook_imbalance?.toFixed?.(4) || snapshot.orderbook_imbalance || 'N/A'}
+- Open Interest: ${snapshot.open_interest ? (snapshot.open_interest / 1e6)?.toFixed(1) + 'M' : 'N/A'}
 
 Make a trading decision for the next 15 minutes.
-Respond ONLY with valid JSON:
+Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
 {"action":"BUY"|"SELL"|"HOLD","size":0.1-1.0,"leverage":1-20,"confidence":0.0-1.0,"take_profit":0.1-3.0,"stop_loss":0.1-2.0,"reasoning":"brief explanation"}`;
 
-  try {
+  const cleanJsonResponse = (raw) => {
+    if (!raw) throw new Error('Empty OpenRouter response');
+    let cleaned = String(raw).trim();
+    cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in OpenRouter response');
+    cleaned = jsonMatch[0].replace(/,\s*([}\]])/g, '$1');
+
+    let normalized = '';
+    let inString = false;
+    let escaped = false;
+
+    for (const ch of cleaned) {
+      if (inString) {
+        if (escaped) {
+          normalized += ch;
+          escaped = false;
+          continue;
+        }
+
+        if (ch === '\\') {
+          normalized += ch;
+          escaped = true;
+          continue;
+        }
+
+        if (ch === '"') {
+          normalized += ch;
+          inString = false;
+          continue;
+        }
+
+        if (ch === '\n') {
+          normalized += '\\n';
+          continue;
+        }
+
+        if (ch === '\r') {
+          normalized += '\\r';
+          continue;
+        }
+
+        if (ch === '\t') {
+          normalized += '\\t';
+          continue;
+        }
+
+        if ((ch >= '\x00' && ch <= '\x08') || ch === '\x0B' || ch === '\x0C' || (ch >= '\x0E' && ch <= '\x1F') || ch === '\x7F') {
+          continue;
+        }
+
+        normalized += ch;
+      } else {
+        normalized += ch;
+        if (ch === '"') inString = true;
+      }
+    }
+
+    return normalized;
+  };
+
+  const parseDecision = (raw) => {
+    const d = JSON.parse(cleanJsonResponse(raw));
+    return {
+      action: d.action || 'HOLD',
+      size: Math.min(1, Math.max(0.1, parseFloat(d.size) || 0.3)),
+      leverage: Math.min(20, Math.max(1, parseInt(d.leverage) || 5)),
+      confidence: Math.min(1, Math.max(0, parseFloat(d.confidence) || 0.5)),
+      take_profit: Math.min(5, Math.max(0.1, parseFloat(d.take_profit) || 1.0)),
+      stop_loss: Math.min(5, Math.max(0.1, parseFloat(d.stop_loss) || 0.5)),
+      reasoning: d.reasoning || '',
+    };
+  };
+
+  const requestDecision = async (temperature) => {
     const res = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
@@ -306,28 +384,29 @@ Respond ONLY with valid JSON:
         model: modelId,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 200,
-        temperature: 0.7,
+        temperature,
+        response_format: { type: 'json_object' },
       }),
     });
-    
+
     if (!res.ok) throw new Error(`API ${res.status}`);
     const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || '';
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const d = JSON.parse(jsonMatch[0]);
-      return {
-        action: d.action || 'HOLD',
-        size: Math.min(1, Math.max(0.1, parseFloat(d.size) || 0.3)),
-        leverage: Math.min(20, Math.max(1, parseInt(d.leverage) || 5)),
-        confidence: Math.min(1, Math.max(0, parseFloat(d.confidence) || 0.5)),
-        take_profit: Math.min(5, Math.max(0.1, parseFloat(d.take_profit) || 1.0)),
-        stop_loss: Math.min(5, Math.max(0.1, parseFloat(d.stop_loss) || 0.5)),
-        reasoning: d.reasoning || '',
-      };
-    }
+    return parseDecision(data.choices?.[0]?.message?.content || '');
+  };
+
+  try {
+    return await requestDecision(0.7);
   } catch (e) {
-    console.warn(`AI decision failed for ${modelId}:`, e.message);
+    if (e instanceof SyntaxError || /No JSON|control character|Unexpected token|Expected/i.test(e.message)) {
+      console.warn(`AI decision parse failed for ${modelId}, retrying with temp 0.3:`, e.message);
+      try {
+        return await requestDecision(0.3);
+      } catch (retryError) {
+        console.warn(`AI retry failed for ${modelId}:`, retryError.message);
+      }
+    } else {
+      console.warn(`AI decision failed for ${modelId}:`, e.message);
+    }
   }
 
   return {
@@ -363,7 +442,81 @@ Make a trading decision for the next 15 minutes.
 Respond ONLY with valid JSON:
 {"action":"BUY"|"SELL"|"HOLD","size":0.1-1.0,"leverage":1-20,"confidence":0.0-1.0,"take_profit":0.1-3.0,"stop_loss":0.1-2.0,"reasoning":"brief explanation"}`;
 
-  try {
+  const cleanJsonResponse = (raw) => {
+    if (!raw) throw new Error('Empty ChainGPT response');
+    let cleaned = String(raw).trim();
+    cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in ChainGPT response');
+    cleaned = jsonMatch[0].replace(/,\s*([}\]])/g, '$1');
+
+    let normalized = '';
+    let inString = false;
+    let escaped = false;
+
+    for (const ch of cleaned) {
+      if (inString) {
+        if (escaped) {
+          normalized += ch;
+          escaped = false;
+          continue;
+        }
+
+        if (ch === '\\') {
+          normalized += ch;
+          escaped = true;
+          continue;
+        }
+
+        if (ch === '"') {
+          normalized += ch;
+          inString = false;
+          continue;
+        }
+
+        if (ch === '\n') {
+          normalized += '\\n';
+          continue;
+        }
+
+        if (ch === '\r') {
+          normalized += '\\r';
+          continue;
+        }
+
+        if (ch === '\t') {
+          normalized += '\\t';
+          continue;
+        }
+
+        if ((ch >= '\x00' && ch <= '\x08') || ch === '\x0B' || ch === '\x0C' || (ch >= '\x0E' && ch <= '\x1F') || ch === '\x7F') {
+          continue;
+        }
+
+        normalized += ch;
+      } else {
+        normalized += ch;
+        if (ch === '"') inString = true;
+      }
+    }
+
+    return normalized;
+  };
+
+  const parseDecision = (raw) => {
+    const d = JSON.parse(cleanJsonResponse(raw));
+    return {
+      action: d.action || 'HOLD',
+      size: Math.min(1, Math.max(0.1, parseFloat(d.size) || 0.3)),
+      leverage: Math.min(20, Math.max(1, parseInt(d.leverage) || 5)),
+      confidence: Math.min(1, Math.max(0, parseFloat(d.confidence) || 0.5)),
+      take_profit: Math.min(5, Math.max(0.1, parseFloat(d.take_profit) || 1.0)),
+      stop_loss: Math.min(5, Math.max(0.1, parseFloat(d.stop_loss) || 0.5)),
+      reasoning: d.reasoning || '',
+    };
+  };
+
+  const requestDecision = async (temperature) => {
     const res = await fetch(CHAINGPT_API_URL, {
       method: 'POST',
       headers: {
@@ -374,27 +527,28 @@ Respond ONLY with valid JSON:
         model: 'general_assistant',
         question,
         chatHistory: 'off',
+        temperature,
       }),
     });
 
     if (!res.ok) throw new Error(`ChainGPT API ${res.status}`);
     const text = await res.text();
-    const jsonMatch = text.match(/\{[\s\S]*?\}/);
-    if (jsonMatch) {
-      const d = JSON.parse(jsonMatch[0]);
-      return {
-        action: d.action || 'HOLD',
-        size: Math.min(1, Math.max(0.1, parseFloat(d.size) || 0.3)),
-        leverage: Math.min(20, Math.max(1, parseInt(d.leverage) || 5)),
-        confidence: Math.min(1, Math.max(0, parseFloat(d.confidence) || 0.5)),
-        take_profit: Math.min(5, Math.max(0.1, parseFloat(d.take_profit) || 1.0)),
-        stop_loss: Math.min(5, Math.max(0.1, parseFloat(d.stop_loss) || 0.5)),
-        reasoning: d.reasoning || '',
-      };
-    }
-    throw new Error('No JSON in ChainGPT response');
+    return parseDecision(text);
+  };
+
+  try {
+    return await requestDecision(0.7);
   } catch (e) {
-    console.warn(`ChainGPT decision failed:`, e.message);
+    if (e instanceof SyntaxError || /No JSON|control character|Unexpected token|Expected/i.test(e.message)) {
+      console.warn(`ChainGPT parse failed, retrying with temp 0.3:`, e.message);
+      try {
+        return await requestDecision(0.3);
+      } catch (retryError) {
+        console.warn(`ChainGPT retry failed:`, retryError.message);
+      }
+    } else {
+      console.warn(`ChainGPT decision failed:`, e.message);
+    }
   }
 
   return {
@@ -438,6 +592,12 @@ function updatePortfolio(db, botId, size, pnlPercent) {
           last_updated = datetime('now')
       WHERE bot_id = ?
     `).run(nextBalance, nextPeak, pnlUsd, botId);
+
+    // Sync total_pnl in trading_elo from trading_portfolio (single source of truth)
+    const updated = db.prepare(`SELECT total_pnl_usd FROM trading_portfolio WHERE bot_id = ?`).get(botId);
+    if (updated) {
+      db.prepare(`UPDATE trading_elo SET total_pnl = ? WHERE bot_id = ?`).run(updated.total_pnl_usd, botId);
+    }
   } catch (e) {
     console.error(`Portfolio update failed for bot ${botId}:`, e.message);
   }
@@ -503,6 +663,18 @@ async function runBattleCycle(db) {
       UPDATE trading_elo SET elo = elo - ?
       WHERE bot_id = ?
     `).run(delta1, battle.bot2_id);
+
+    // Update wins/losses/draws counters
+    if (winnerId === battle.bot1_id) {
+      db.prepare(`UPDATE trading_elo SET wins = wins + 1 WHERE bot_id = ?`).run(battle.bot1_id);
+      db.prepare(`UPDATE trading_elo SET losses = losses + 1 WHERE bot_id = ?`).run(battle.bot2_id);
+    } else if (winnerId === battle.bot2_id) {
+      db.prepare(`UPDATE trading_elo SET wins = wins + 1 WHERE bot_id = ?`).run(battle.bot2_id);
+      db.prepare(`UPDATE trading_elo SET losses = losses + 1 WHERE bot_id = ?`).run(battle.bot1_id);
+    } else {
+      db.prepare(`UPDATE trading_elo SET draws = draws + 1 WHERE bot_id = ?`).run(battle.bot1_id);
+      db.prepare(`UPDATE trading_elo SET draws = draws + 1 WHERE bot_id = ?`).run(battle.bot2_id);
+    }
 
     updatePortfolio(db, battle.bot1_id, battle.bot1_size, bot1Pnl);
     updatePortfolio(db, battle.bot2_id, battle.bot2_size, bot2Pnl);

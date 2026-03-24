@@ -1,52 +1,122 @@
 #!/usr/bin/env node
 // GemBots Health Check — run via: node scripts/health-check.js
-// Checks: matchmaker alive, resolver alive, dead bots, entry_price coverage, battle flow
+// Checks: PM2 processes, SQLite battle freshness, gembots.space HTTP 200
 
 const { execSync } = require('child_process');
+const path = require('path');
+const Database = require('better-sqlite3');
+
+const REQUIRED_PM2_PROCESSES = [
+  'gembots-web',
+  'trading-battles',
+  'trading-tournament',
+  'battle-commentator',
+];
+
+function run(cmd) {
+  return execSync(cmd, { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+}
+
+function minutesSince(timestamp) {
+  if (!timestamp) return null;
+  const ms = Date.now() - new Date(timestamp.replace(' ', 'T') + 'Z').getTime();
+  if (!Number.isFinite(ms)) return null;
+  return Math.round(ms / 60000);
+}
 
 async function main() {
   const issues = [];
-  
+  let db;
+
   // 1. PM2 processes
   try {
-    const pm2 = execSync('pm2 jlist 2>/dev/null').toString();
-    const procs = JSON.parse(pm2);
-    for (const name of ['gembots-matchmaker', 'gembots-resolver']) {
+    const procs = JSON.parse(run('pm2 jlist 2>/dev/null'));
+
+    for (const name of REQUIRED_PM2_PROCESSES) {
       const p = procs.find(x => x.name === name);
-      if (!p) issues.push(`🔴 ${name} not found in PM2`);
-      else if (p.pm2_env.status !== 'online') issues.push(`🔴 ${name} status: ${p.pm2_env.status}`);
-      else console.log(`✅ ${name}: online (pid ${p.pid}, uptime ${Math.round(p.pm2_env.pm_uptime ? (Date.now()-p.pm2_env.pm_uptime)/60000 : 0)}m)`);
+      if (!p) {
+        issues.push(`🔴 ${name} not found in PM2`);
+        continue;
+      }
+
+      const status = p.pm2_env?.status;
+      if (status !== 'online') {
+        issues.push(`🔴 ${name} status: ${status || 'unknown'}`);
+        continue;
+      }
+
+      const uptimeMin = p.pm2_env?.pm_uptime
+        ? Math.round((Date.now() - p.pm2_env.pm_uptime) / 60000)
+        : 0;
+
+      console.log(`✅ ${name}: online (pid ${p.pid}, uptime ${uptimeMin}m)`);
     }
-  } catch(e) { issues.push('🔴 PM2 check failed: ' + e.message); }
+  } catch (e) {
+    issues.push('🔴 PM2 check failed: ' + e.message);
+  }
 
-  // 2. Database checks via psql
-  const PGCMD = 'PGPASSWORD=${PGPASSWORD:-postgres} psql -h 127.0.0.1 -p 54322 -U postgres -t -c';
-  
-  // Dead bots
-  const deadBots = parseInt(execSync(`${PGCMD} "SELECT COUNT(*) FROM bots WHERE is_npc=true AND hp=0;"`).toString().trim());
-  if (deadBots > 10) issues.push(`🟡 ${deadBots} dead NPC bots (hp=0)`);
-  else console.log(`✅ Dead bots: ${deadBots}`);
+  // 2. SQLite battle freshness
+  try {
+    const dbPath = path.join(process.cwd(), 'data', 'gembots.db');
+    db = new Database(dbPath, { readonly: true });
 
-  // Active battles
-  const activeBattles = parseInt(execSync(`${PGCMD} "SELECT COUNT(*) FROM battles WHERE status='active';"`).toString().trim());
-  console.log(`📊 Active battles: ${activeBattles}`);
+    const startedLastHour = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM trading_battles
+      WHERE datetime(started_at) > datetime('now', '-1 hour')
+    `).get().count;
 
-  // Entry price coverage (last hour)
-  const entryStats = execSync(`${PGCMD} "SELECT COUNT(*) FILTER (WHERE entry_price IS NOT NULL) || '/' || COUNT(*) FROM battles WHERE status='active';"`).toString().trim();
-  console.log(`📊 Entry price coverage (active): ${entryStats}`);
+    const resolvedLastHour = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM trading_battles
+      WHERE resolved_at IS NOT NULL
+        AND datetime(resolved_at) > datetime('now', '-1 hour')
+    `).get().count;
 
-  // Battles resolved in last hour
-  const recentResolved = parseInt(execSync(`${PGCMD} "SELECT COUNT(*) FROM battles WHERE status='resolved' AND finished_at > NOW() - INTERVAL '1 hour';"`).toString().trim());
-  if (recentResolved === 0) issues.push('🔴 No battles resolved in last hour!');
-  else console.log(`✅ Resolved last hour: ${recentResolved}`);
+    const latestBattle = db.prepare(`
+      SELECT id, status, symbol, started_at, resolved_at
+      FROM trading_battles
+      ORDER BY datetime(COALESCE(resolved_at, started_at)) DESC
+      LIMIT 1
+    `).get();
 
-  // Bot names in recent battles
-  const noNames = parseInt(execSync(`${PGCMD} "SELECT COUNT(*) FROM battles WHERE created_at > NOW() - INTERVAL '1 hour' AND (bot1_name IS NULL OR bot1_name='');"`).toString().trim());
-  if (noNames > 5) issues.push(`🟡 ${noNames} recent battles without bot names`);
+    const latestTs = latestBattle?.resolved_at || latestBattle?.started_at;
+    const latestAgeMin = minutesSince(latestTs);
+
+    if ((startedLastHour + resolvedLastHour) === 0) {
+      issues.push('🔴 No fresh trading_battles activity in SQLite for the last hour');
+    } else {
+      console.log(`✅ trading_battles freshness: started ${startedLastHour}/h, resolved ${resolvedLastHour}/h`);
+      if (latestBattle) {
+        console.log(
+          `📊 Latest battle: ${latestBattle.id} | ${latestBattle.symbol || '?'} | ${latestBattle.status} | ${latestAgeMin ?? '?'}m ago`
+        );
+      }
+    }
+  } catch (e) {
+    issues.push('🔴 SQLite check failed: ' + e.message);
+  } finally {
+    if (db) db.close();
+  }
+
+  // 3. Public site health
+  try {
+    const httpCode = run(`curl -L -s -o /dev/null -w "%{http_code}" https://gembots.space`);
+    if (httpCode !== '200') {
+      issues.push(`🔴 gembots.space returned HTTP ${httpCode}`);
+    } else {
+      console.log('✅ gembots.space: HTTP 200');
+    }
+  } catch (e) {
+    issues.push('🔴 gembots.space check failed: ' + e.message);
+  }
 
   // Summary
   console.log('\n' + (issues.length === 0 ? '✅ All checks passed!' : '⚠️ Issues found:\n' + issues.join('\n')));
   process.exit(issues.some(i => i.startsWith('🔴')) ? 1 : 0);
 }
 
-main().catch(e => { console.error('Health check failed:', e); process.exit(1); });
+main().catch(e => {
+  console.error('Health check failed:', e);
+  process.exit(1);
+});
