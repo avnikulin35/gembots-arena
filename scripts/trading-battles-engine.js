@@ -306,6 +306,13 @@ Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
     if (!jsonMatch) throw new Error('No JSON in OpenRouter response');
     cleaned = jsonMatch[0].replace(/,\s*([}\]])/g, '$1');
 
+    // Fix unquoted keys (e.g. {action: "BUY"} -> {"action": "BUY"})
+    cleaned = cleaned.replace(/([{,])\s*([a-zA-Z_]\w*)\s*:/g, '$1"$2":');
+    // Fix single-quoted values
+    cleaned = cleaned.replace(/:\s*'([^']*)'/g, ':"$1"');
+    // Fix unquoted BUY/SELL/HOLD
+    cleaned = cleaned.replace(/:\s*(BUY|SELL|HOLD)(\s*[,}])/g, ':"$1"$2');
+
     let normalized = '';
     let inString = false;
     let escaped = false;
@@ -449,6 +456,13 @@ Respond ONLY with valid JSON:
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in ChainGPT response');
     cleaned = jsonMatch[0].replace(/,\s*([}\]])/g, '$1');
+
+    // Fix unquoted keys (e.g. {action: "BUY"} -> {"action": "BUY"})
+    cleaned = cleaned.replace(/([{,])\s*([a-zA-Z_]\w*)\s*:/g, '$1"$2":');
+    // Fix single-quoted values
+    cleaned = cleaned.replace(/:\s*'([^']*)'/g, ':"$1"');
+    // Fix unquoted BUY/SELL/HOLD
+    cleaned = cleaned.replace(/:\s*(BUY|SELL|HOLD)(\s*[,}])/g, ':"$1"$2');
 
     let normalized = '';
     let inString = false;

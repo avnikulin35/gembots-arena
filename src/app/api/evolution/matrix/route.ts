@@ -27,7 +27,7 @@ export async function GET() {
     // Get bots
     const { data: bots } = await supabase
       .from('bots')
-      .select('id, ai_model, trading_style');
+      .select('id, model_id, strategy');
 
     const botMap: Record<string, any> = {};
     for (const b of bots || []) botMap[b.id] = b;
@@ -38,9 +38,9 @@ export async function GET() {
       for (const side of ['bot1_id', 'bot2_id'] as const) {
         const botId = b[side];
         const bot = botMap[botId];
-        if (!bot?.ai_model || !bot?.trading_style) continue;
-        const key = `${bot.ai_model}|${bot.trading_style}`;
-        if (!matrix[key]) matrix[key] = { model: bot.ai_model, style: bot.trading_style, wins: 0, total: 0 };
+        if (!bot?.model_id || !bot?.strategy) continue;
+        const key = `${bot.model_id}|${bot.strategy}`;
+        if (!matrix[key]) matrix[key] = { model: bot.model_id, style: bot.strategy, wins: 0, total: 0 };
         matrix[key].total++;
         if (b.winner_id === botId) matrix[key].wins++;
       }
