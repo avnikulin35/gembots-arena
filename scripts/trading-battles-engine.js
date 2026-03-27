@@ -43,7 +43,7 @@ const MODEL_POOL = [
   'meta-llama/llama-4-maverick',
   'deepseek/deepseek-r1',
   'mistralai/mistral-small-24b-instruct-2501',
-  'x-ai/grok-4.1-fast',
+  'openai/gpt-4.1-nano',
 ];
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -301,6 +301,11 @@ Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
   const cleanJsonResponse = (raw) => {
     if (!raw) throw new Error('Empty OpenRouter response');
     let cleaned = String(raw).trim();
+    // Strip Qwen3/DeepSeek thinking tags
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    // Strip leading prose before first JSON brace
+    const firstBrace = cleaned.indexOf('{');
+    if (firstBrace > 0) cleaned = cleaned.substring(firstBrace);
     cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in OpenRouter response');
@@ -390,7 +395,7 @@ Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
       body: JSON.stringify({
         model: modelId,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 200,
+        max_tokens: 400,
         temperature,
         response_format: { type: 'json_object' },
       }),
