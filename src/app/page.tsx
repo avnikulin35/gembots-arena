@@ -292,7 +292,7 @@ export default function HomePage() {
         {/* ═══ 1. HERO ═══ */}
         <section className="w-full max-w-6xl mx-auto px-6 pt-20 pb-16 text-center">
           <motion.div
-            initial={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             className="flex flex-col items-center"
@@ -348,7 +348,7 @@ export default function HomePage() {
 
           {/* Stats bar */}
           <motion.div
-            initial={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
             className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto"

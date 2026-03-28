@@ -1,48 +1,61 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const DB_PATH = path.join(process.cwd(), 'data', 'gembots.db');
 
 export const revalidate = 300; // Cache for 5 minutes
 
 export async function GET() {
+  const db = new Database(DB_PATH, { readonly: true });
   try {
-    const since = new Date(Date.now() - 72 * 3600000).toISOString(); // Last 72h
+    const since = new Date(Date.now() - 72 * 3600000).toISOString();
 
-    // Get battles
-    const { data: battles } = await supabase
-      .from('battles')
-      .select('bot1_id, bot2_id, winner_id')
-      .eq('status', 'resolved')
-      .gte('finished_at', since)
-      .limit(5000);
+    // Get resolved battles from last 72h with bot model+strategy info
+    const battles = db.prepare(`
+      SELECT
+        tb.bot1_id,
+        tb.bot2_id,
+        tb.winner_id,
+        tb.bot1_model,
+        tb.bot2_model,
+        b1.strategy AS bot1_strategy,
+        b2.strategy AS bot2_strategy
+      FROM trading_battles tb
+      LEFT JOIN api_bots b1 ON b1.id = tb.bot1_id
+      LEFT JOIN api_bots b2 ON b2.id = tb.bot2_id
+      WHERE tb.status = 'resolved'
+        AND tb.resolved_at >= ?
+      LIMIT 5000
+    `).all(since) as {
+      bot1_id: string;
+      bot2_id: string;
+      winner_id: string | null;
+      bot1_model: string;
+      bot2_model: string;
+      bot1_strategy: string | null;
+      bot2_strategy: string | null;
+    }[];
 
-    if (!battles || battles.length === 0) {
-      return NextResponse.json({ matrix: [], bestPerModel: {}, totalBattles: 0 });
+    if (battles.length === 0) {
+      return NextResponse.json({ matrix: [], bestPerModel: {}, totalBattles: 0, totalEvolutions: 0, lastEvolution: null });
     }
-
-    // Get bots
-    const { data: bots } = await supabase
-      .from('bots')
-      .select('id, model_id, strategy');
-
-    const botMap: Record<string, any> = {};
-    for (const b of bots || []) botMap[b.id] = b;
 
     // Build matrix
     const matrix: Record<string, { model: string; style: string; wins: number; total: number }> = {};
+
     for (const b of battles) {
-      for (const side of ['bot1_id', 'bot2_id'] as const) {
-        const botId = b[side];
-        const bot = botMap[botId];
-        if (!bot?.model_id || !bot?.strategy) continue;
-        const key = `${bot.model_id}|${bot.strategy}`;
-        if (!matrix[key]) matrix[key] = { model: bot.model_id, style: bot.strategy, wins: 0, total: 0 };
+      const sides = [
+        { id: b.bot1_id, model: b.bot1_model, strategy: b.bot1_strategy },
+        { id: b.bot2_id, model: b.bot2_model, strategy: b.bot2_strategy },
+      ];
+      for (const side of sides) {
+        if (!side.model || !side.strategy) continue;
+        const key = `${side.model}|${side.strategy}`;
+        if (!matrix[key]) matrix[key] = { model: side.model, style: side.strategy, wins: 0, total: 0 };
         matrix[key].total++;
-        if (b.winner_id === botId) matrix[key].wins++;
+        if (b.winner_id === side.id) matrix[key].wins++;
       }
     }
 
@@ -61,8 +74,6 @@ export async function GET() {
     }
 
     // Evolution log stats
-    const fs = await import('fs');
-    const path = await import('path');
     const logFile = path.join(process.cwd(), 'data', 'evolution', 'evolution-log.jsonl');
     let totalEvolutions = 0;
     let lastEvolution = null;
@@ -87,5 +98,7 @@ export async function GET() {
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    db.close();
   }
 }

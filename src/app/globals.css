@@ -269,22 +269,3 @@ body {
     margin-right: 6px !important;
   }
 }
-
-/* Motion SSR fallback: never leave the page invisible if client JS fails */
-@media (prefers-reduced-motion: reduce) {
-  [style*="opacity: 0"] {
-    opacity: 1 !important;
-    transform: none !important;
-  }
-}
-
-@keyframes forceShow {
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-[style*="opacity: 0"] {
-  animation: forceShow 0s 2s forwards;
-}

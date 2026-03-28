@@ -250,7 +250,7 @@ const BenchmarkPage: React.FC = () => {
                   />
                   <Tooltip
                     cursor={{ fill: 'rgba(255,255,255,0.1)' }}
-                    formatter={(value: any) => [`${(value || 0).toFixed(1)}%`, 'Win Rate']}
+                    formatter={(value) => [`${Number(value ?? 0).toFixed(1)}%`, 'Win Rate']}
                     labelFormatter={(label) => formatModelName(label)}
                     contentStyle={{ backgroundColor: '#2d3748', border: 'none', borderRadius: '4px', color: '#fff' }} // gray-700
                     labelStyle={{ color: '#fff', fontWeight: 'bold' }}

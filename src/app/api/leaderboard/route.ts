@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     // Get all bots with at least 1 battle, sorted by wins
     const { data: bots, error } = await supabase
       .from('bots')
-      .select('id, name, wins, losses, hp, league, avatar_state, telegram_id, elo, peak_elo, total_battles, win_streak, model_id, strategy')
+      .select('id, name, wins, losses, hp, league, avatar_state, telegram_id, elo, peak_elo, total_battles, win_streak, ai_model, model_id, trading_style')
       .order('elo', { ascending: false })
       .limit(50);
 
@@ -59,8 +59,8 @@ export async function GET(req: NextRequest) {
           peakElo: bot.peak_elo || 1000,
           winStreak: bot.win_streak || 0,
           telegram_id: bot.telegram_id,
-          aiModel: bot.model_id ? getModelDisplayName(bot.model_id) : null,
-          tradingStyle: bot.strategy || null,
+          aiModel: bot.model_id ? getModelDisplayName(bot.model_id) : (bot.ai_model || null),
+          tradingStyle: bot.trading_style || null,
         };
       })
       .filter((bot) => bot.totalBattles >= 5)
