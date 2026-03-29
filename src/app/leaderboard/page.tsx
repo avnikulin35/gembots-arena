@@ -230,6 +230,11 @@ function TradingLeagueTab({ data, portfolios }: { data: TradingLeagueData | null
                       </td>
                       <td className="px-4 py-4">
                         <span className="font-bold text-white">{displayName}</span>
+                        {m.model.startsWith('chaingpt/') && (
+                          <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                            ⚡ ChainGPT
+                          </span>
+                        )}
                         <span className="text-xs text-gray-600 ml-2">{provider}</span>
                       </td>
                       <td className={`px-4 py-4 text-right font-mono font-bold text-lg ${m.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>

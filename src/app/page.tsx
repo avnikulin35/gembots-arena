@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useContractStats } from '@/hooks/useNFAContract';
+import ChainGPTShowcase from '@/components/ChainGPTShowcase';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -383,6 +384,9 @@ export default function HomePage() {
 
         {/* ═══ 2. LIVE TRADING LEAGUE ═══ */}
         <LiveTradingLeague />
+
+        {/* ═══ 2.5. CHAINGPT SHOWCASE ═══ */}
+        <ChainGPTShowcase />
 
         {/* ═══ 3. WHY OPEN SOURCE ═══ */}
         <section className="w-full max-w-6xl mx-auto px-6 py-20 text-center">
