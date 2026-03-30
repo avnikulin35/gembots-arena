@@ -1,20 +1,14 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 interface TickerEvent {
   id: string;
   text: string;
   icon: string;
   time: string;
-  type: 'battle' | 'result' | 'tournament';
+  type: 'battle' | 'result';
 }
 
 function timeAgo(date: string): string {
@@ -33,62 +27,33 @@ export default function LiveTicker() {
 
   useEffect(() => {
     async function fetchEvents() {
-      // Fetch recent battles (active + recently finished)
-      const { data: active } = await supabase
-        .from('battles')
-        .select('id, bot1_id, bot2_id, token_symbol, status, created_at, resolves_at, winner_name')
-        .in('status', ['active', 'finished'])
-        .order('created_at', { ascending: false })
-        .limit(10);
+      try {
+        const res = await fetch('/api/stats');
+        if (!res.ok) return;
+        const data = await res.json();
+        const battles = data.recentBattles || [];
+        if (battles.length === 0) { setIsLive(false); return; }
 
-      if (!active || active.length === 0) {
+        const tickerEvents: TickerEvent[] = battles.map((b: any) => ({
+          id: b.id,
+          text: `${b.bot1} vs ${b.bot2} on $${b.token}`,
+          icon: b.winner === 'Draw' ? '🤝' : '🏆',
+          time: timeAgo(b.resolvedAt),
+          type: 'result' as const,
+        }));
+
+        setEvents(tickerEvents);
         setIsLive(false);
-        return;
+      } catch {
+        // silently fail — don't crash the page
       }
-
-      // Get bot names
-      const botIds = new Set<number>();
-      active.forEach(b => { botIds.add(b.bot1_id); botIds.add(b.bot2_id); });
-      const { data: bots } = await supabase
-        .from('bots')
-        .select('id, name')
-        .in('id', Array.from(botIds));
-      
-      const botMap = new Map(bots?.map(b => [b.id, b.name]) || []);
-
-      const tickerEvents: TickerEvent[] = active.map(b => {
-        const bot1 = botMap.get(b.bot1_id) || `Bot #${b.bot1_id}`;
-        const bot2 = botMap.get(b.bot2_id) || `Bot #${b.bot2_id}`;
-        
-        if (b.status === 'active') {
-          return {
-            id: b.id,
-            text: `${bot1} vs ${bot2} on $${b.token_symbol}`,
-            icon: '⚔️',
-            time: timeAgo(b.created_at),
-            type: 'battle' as const,
-          };
-        } else {
-          return {
-            id: b.id,
-            text: `${b.winner_name || bot1} won vs ${b.winner_name === bot1 ? bot2 : bot1} on $${b.token_symbol}`,
-            icon: '🏆',
-            time: timeAgo(b.created_at),
-            type: 'result' as const,
-          };
-        }
-      });
-
-      setEvents(tickerEvents);
-      setIsLive(tickerEvents.some(e => e.type === 'battle'));
     }
 
     fetchEvents();
-    const interval = setInterval(fetchEvents, 15000);
+    const interval = setInterval(fetchEvents, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Rotate through events
   useEffect(() => {
     if (events.length <= 1) return;
     const interval = setInterval(() => {
@@ -105,7 +70,6 @@ export default function LiveTicker() {
     <div className="w-full bg-gray-900/80 backdrop-blur-sm border-y border-gray-800 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 py-2">
         <div className="flex items-center gap-3 text-sm">
-          {/* LIVE indicator */}
           <div className="flex items-center gap-1.5 shrink-0">
             <span className={`relative flex h-2.5 w-2.5 ${isLive ? '' : 'opacity-50'}`}>
               {isLive && (
@@ -117,8 +81,6 @@ export default function LiveTicker() {
               {isLive ? 'LIVE' : 'RECENT'}
             </span>
           </div>
-
-          {/* Ticker content */}
           <div className="flex-1 overflow-hidden relative h-5">
             <AnimatePresence mode="wait">
               <motion.div
@@ -135,10 +97,8 @@ export default function LiveTicker() {
               </motion.div>
             </AnimatePresence>
           </div>
-
-          {/* Battle count */}
           <div className="shrink-0 text-xs text-gray-500">
-            {events.filter(e => e.type === 'battle').length} active
+            {events.length} recent
           </div>
         </div>
       </div>

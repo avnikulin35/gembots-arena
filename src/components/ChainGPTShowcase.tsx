@@ -15,7 +15,7 @@ interface ChainGPTPerformance {
   ranking: number;
   totalModels: number;
   vsAvg: { winRate: number; avgPnl: number };
-  apiCalls: number;
+  apiCalls: number | { total?: number; battles?: number; commentator?: number; strategyFactory?: number; last24h?: number };
 }
 
 export default function ChainGPTShowcase() {
@@ -105,7 +105,7 @@ export default function ChainGPTShowcase() {
                   <span className="text-sm text-gray-400">ChainGPT API Calls</span>
                 </div>
                 <span className="text-lg font-bold font-mono text-cyan-400">
-                  {data.apiCalls.toLocaleString()}
+                  {(typeof data.apiCalls === 'object' && data.apiCalls !== null ? (data.apiCalls as any).total ?? 0 : data.apiCalls ?? 0).toLocaleString()}
                 </span>
               </div>
             </>
