@@ -42,7 +42,7 @@ export async function GET() {
 
     const { data: bots, error } = await supabase
       .from('bots')
-      .select('id, name, ai_model, trading_style, wins, losses, elo, model_id')
+      .select('id, name, trading_style, wins, losses, elo, model_id')
       .eq('is_npc', true);
 
     if (error) throw error;
@@ -53,7 +53,7 @@ export async function GET() {
     const modelTotals: Record<string, { wins: number; losses: number; bots: number; eloSum: number }> = {};
 
     for (const b of bots) {
-      const model = b.model_id ? getModelDisplayName(b.model_id) : (b.ai_model || 'Unknown');
+      const model = b.model_id ? getModelDisplayName(b.model_id) : 'Unknown';
       const strategy = b.trading_style || 'unknown';
       const wins = b.wins || 0;
       const losses = b.losses || 0;

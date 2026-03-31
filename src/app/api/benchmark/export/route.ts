@@ -61,7 +61,7 @@ export async function GET(request: Request) {
     });
 
     const { data: botData } = botIds.size > 0
-      ? await supabase.from('bots').select('id, name, strategy, ai_model, model_id').in('id', Array.from(botIds))
+      ? await supabase.from('bots').select('id, name, strategy, model_id').in('id', Array.from(botIds))
       : { data: [] };
 
     const botMap: Record<number, { name: string; strategy: string; model: string }> = {};
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
       botMap[b.id] = {
         name: b.name || `Bot #${b.id}`,
         strategy: b.strategy || 'unknown',
-        model: b.model_id || b.ai_model || 'unknown',
+        model: b.model_id || 'unknown',
       };
     });
 
