@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { getModelDisplayName, getProviderEmoji } from '@/lib/model-display';
+import Database from 'better-sqlite3';
+import path from 'path';
+import { getModelDisplayName } from '@/lib/model-display';
 
 export const dynamic = 'force-dynamic';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY!;
-
-function getSupabase() {
-  return createClient(SUPABASE_URL, SUPABASE_KEY);
-}
+const DB_PATH = path.join(process.cwd(), 'data/gembots.db');
 
 const STRATEGY_LABELS: Record<string, string> = {
   scalper: '⚡ Scalper',
@@ -17,67 +13,75 @@ const STRATEGY_LABELS: Record<string, string> = {
   swing: '🌊 Swing',
   mean_reversion: '🔄 Mean Rev',
   contrarian: '🔮 Contrarian',
+  trend_follower: '📊 Trend Follower',
 };
 
 const MODEL_EMOJIS: Record<string, string> = {
-  'GPT-4.1-mini': '🧠',
-  'Claude Haiku 3.5': '🎭',
-  'Gemini 2.5 Flash': '✨',
-  'Grok 4.1': '𝕏',
+  'GPT-4.1 Nano': '🧠',
+  'Gemini Flash Lite': '✨',
   'DeepSeek R1': '🔬',
-  'DeepSeek R1 Free': '🐋',
   'Llama 4 Maverick': '🦙',
-  'Command R': '🔶',
-  'Phi-4': '🔷',
-  'Qwen 3.5 Coder': '⚡',
-  'Mistral Large': '🌊',
-  'Mistral Small 3.1': '🌬️',
-  'MiniMax M2.5': '🔮',
-  'Gemma 3 27B': '💎',
+  'Qwen3 235B': '⚡',
+  'Mistral Nemo': '🌊',
+  'Mistral Small': '🌬️',
+  'Gemma 3 12B': '💎',
+  'Grok 4.1 Fast': '𝕏',
+  'ChainGPT': '🧠',
 };
 
 export async function GET() {
+  let db: Database.Database | null = null;
   try {
-    const supabase = getSupabase();
+    db = new Database(DB_PATH, { readonly: true });
 
-    const { data: bots, error } = await supabase
-      .from('bots')
-      .select('id, name, trading_style, wins, losses, elo, model_id')
-      .eq('is_npc', true);
+    // Get all battles with model info
+    const battles = db.prepare(`
+      SELECT 
+        bot1_id, bot2_id, winner_id, bot1_pnl, bot2_pnl,
+        bot1_model, bot2_model
+      FROM trading_battles
+      WHERE status = 'resolved'
+    `).all() as any[];
 
-    if (error) throw error;
-    if (!bots) return NextResponse.json({ matrix: [], models: [], strategies: [] });
+    // Get bot strategies
+    const bots = db.prepare('SELECT id, name, strategy FROM api_bots').all() as any[];
+    const botMap = new Map(bots.map((b: any) => [b.id, b]));
 
-    // Build model × strategy matrix
-    const matrixMap: Record<string, Record<string, { wins: number; losses: number; bots: number; avgElo: number; eloSum: number }>> = {};
-    const modelTotals: Record<string, { wins: number; losses: number; bots: number; eloSum: number }> = {};
+    // Build model × strategy performance matrix
+    const matrixMap: Record<string, Record<string, { wins: number; losses: number; totalPnl: number }>> = {};
 
-    for (const b of bots) {
-      const model = b.model_id ? getModelDisplayName(b.model_id) : 'Unknown';
-      const strategy = b.trading_style || 'unknown';
-      const wins = b.wins || 0;
-      const losses = b.losses || 0;
-      const elo = b.elo || 1000;
+    for (const b of battles) {
+      for (const side of ['bot1', 'bot2'] as const) {
+        const botId = b[`${side}_id`];
+        const modelId = b[`${side}_model`];
+        if (!modelId) continue;
+        
+        const bot = botMap.get(botId);
+        const strategy = bot?.strategy || 'unknown';
+        const model = getModelDisplayName(modelId);
+        const pnl = b[`${side}_pnl`] || 0;
+        const won = b.winner_id === botId;
 
-      // Model × Strategy
-      if (!matrixMap[model]) matrixMap[model] = {};
-      if (!matrixMap[model][strategy]) {
-        matrixMap[model][strategy] = { wins: 0, losses: 0, bots: 0, avgElo: 0, eloSum: 0 };
+        if (!matrixMap[model]) matrixMap[model] = {};
+        if (!matrixMap[model][strategy]) matrixMap[model][strategy] = { wins: 0, losses: 0, totalPnl: 0 };
+        
+        matrixMap[model][strategy].totalPnl += pnl;
+        if (won) matrixMap[model][strategy].wins++;
+        else matrixMap[model][strategy].losses++;
       }
-      matrixMap[model][strategy].wins += wins;
-      matrixMap[model][strategy].losses += losses;
-      matrixMap[model][strategy].bots += 1;
-      matrixMap[model][strategy].eloSum += elo;
-
-      // Model totals
-      if (!modelTotals[model]) modelTotals[model] = { wins: 0, losses: 0, bots: 0, eloSum: 0 };
-      modelTotals[model].wins += wins;
-      modelTotals[model].losses += losses;
-      modelTotals[model].bots += 1;
-      modelTotals[model].eloSum += elo;
     }
 
-    // Build sorted model list (by avg ELO)
+    // Build model totals
+    const modelTotals: Record<string, { wins: number; losses: number; totalPnl: number }> = {};
+    for (const [model, strategies] of Object.entries(matrixMap)) {
+      modelTotals[model] = { wins: 0, losses: 0, totalPnl: 0 };
+      for (const s of Object.values(strategies)) {
+        modelTotals[model].wins += s.wins;
+        modelTotals[model].losses += s.losses;
+        modelTotals[model].totalPnl += s.totalPnl;
+      }
+    }
+
     const models = Object.entries(modelTotals)
       .map(([name, t]) => ({
         name,
@@ -86,25 +90,23 @@ export async function GET() {
         totalLosses: t.losses,
         totalBattles: t.wins + t.losses,
         winRate: t.wins + t.losses > 0 ? Math.round((t.wins / (t.wins + t.losses)) * 100) : 0,
-        avgElo: Math.round(t.eloSum / t.bots),
-        bots: t.bots,
+        avgPnl: t.wins + t.losses > 0 ? Math.round(t.totalPnl / (t.wins + t.losses) * 100) / 100 : 0,
+        bots: 0,
       }))
-      .sort((a, b) => b.avgElo - a.avgElo);
+      .sort((a, b) => b.winRate - a.winRate || b.totalBattles - a.totalBattles);
 
-    // Get unique strategies
     const strategies = Object.keys(STRATEGY_LABELS);
 
-    // Build matrix rows
     const matrix = models.map(model => {
-      const cells: Record<string, { winRate: number; battles: number; bots: number; avgElo: number } | null> = {};
+      const cells: Record<string, any> = {};
       for (const strategy of strategies) {
         const data = matrixMap[model.name]?.[strategy];
         if (data && data.wins + data.losses > 0) {
           cells[strategy] = {
             winRate: Math.round((data.wins / (data.wins + data.losses)) * 100),
             battles: data.wins + data.losses,
-            bots: data.bots,
-            avgElo: Math.round(data.eloSum / data.bots),
+            bots: 1,
+            avgPnl: Math.round(data.totalPnl / (data.wins + data.losses) * 100) / 100,
           };
         } else {
           cells[strategy] = null;
@@ -113,14 +115,14 @@ export async function GET() {
       return {
         model: model.name,
         emoji: model.emoji,
-        avgElo: model.avgElo,
+        avgElo: 0,
         totalWinRate: model.winRate,
         totalBattles: model.totalBattles,
+        avgPnl: model.avgPnl,
         cells,
       };
     });
 
-    // Find best model per strategy
     const bestPerStrategy: Record<string, { model: string; winRate: number }> = {};
     for (const strategy of strategies) {
       let best = { model: '', winRate: 0 };
@@ -142,5 +144,7 @@ export async function GET() {
   } catch (e: any) {
     console.error('Model compare API error:', e);
     return NextResponse.json({ error: e.message }, { status: 500 });
+  } finally {
+    db?.close();
   }
 }

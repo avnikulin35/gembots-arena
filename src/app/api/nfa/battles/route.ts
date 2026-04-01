@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       battles,
-      strategy: bot.strategy || bot.trading_style || null,
+      strategy: bot.strategy || bot.strategy || null,
       botName: bot.name,
     });
   } catch (error: unknown) {

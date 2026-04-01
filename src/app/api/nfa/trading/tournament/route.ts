@@ -74,7 +74,7 @@ export async function GET() {
         bot_id: s.bot_id,
         nfa_id: participant?.nfa_id || null,
         bot_name: s.bot_name,
-        strategy: participant?.trading_style || 'default',
+        strategy: participant?.strategy || 'default',
         ai_model: participant?.ai_model || null,
         tournament_pnl_usd: s.total_pnl,
         tournament_pnl_pct: s.total_pnl ? (s.total_pnl / 100) : 0,

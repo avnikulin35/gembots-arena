@@ -175,7 +175,7 @@ export async function GET() {
       name: g.name,
       nfaId: g.nfa_id,
       strategy: g.strategy,
-      tradingStyle: g.trading_style,
+      tradingStyle: g.strategy,
       aiModel: g.ai_model,
       evmAddress: g.evm_address,
       wins: g.wins,

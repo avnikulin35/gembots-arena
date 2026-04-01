@@ -102,7 +102,7 @@ function getTournamentLeaderboard(db: Database.Database) {
       bot_id: e.bot_id,
       nfa_id: participant?.nfa_id || null,
       bot_name: e.bot_name,
-      strategy: participant?.trading_style || 'default',
+      strategy: participant?.strategy || 'default',
       pnl_usd: e.total_pnl,
       pnl_pct: e.total_pnl ? (e.total_pnl / 100) : 0,
       trades: e.total_trades,

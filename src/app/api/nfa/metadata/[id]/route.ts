@@ -103,7 +103,7 @@ async function loadNFAMetadata(nfaId: number) {
     name = (bot.name || `GemBot #${nfaId}`).replace(/^[\p{Emoji_Presentation}\p{Emoji}\s]+/u, '').trim() || `GemBot #${nfaId}`;
     emoji = (bot.name || '').match(/^[\p{Emoji_Presentation}\p{Emoji}]+/u)?.[0] || '🤖';
     aiModel = bot.ai_model || bot.model_id || 'Neural Network';
-    strategy = bot.trading_style || bot.strategy || 'smart_ai';
+    strategy = bot.strategy || bot.strategy || 'smart_ai';
     wins = bot.wins || 0;
     losses = bot.losses || 0;
     totalBattles = bot.total_battles || 0;
