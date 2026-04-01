@@ -45,7 +45,7 @@ const MUTATIONS = {
 };
 
 function getPerformance(hoursBack) {
-  const since = new Date(Date.now() - hoursBack * 3600000).toISOString();
+  const since = new Date(Date.now() - hoursBack * 3600000).toISOString().slice(0, 19).replace('T', ' ');
   
   const battles = db.prepare(`
     SELECT bot1_id, bot2_id, winner_id, bot1_pnl, bot2_pnl, bot1_model, bot2_model
