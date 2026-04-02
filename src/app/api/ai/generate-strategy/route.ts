@@ -33,7 +33,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const strategy = await provider.generateStrategy(description);
+    // Sanitize prompt injection attempts
+    const sanitized = description.replace(/\b(system|assistant)\s*:/gi, '').replace(/ignore\s+(previous|above|all)\s+instructions?/gi, '');
+
+    const strategy = await provider.generateStrategy(sanitized);
 
     if (!strategy) {
       return NextResponse.json(

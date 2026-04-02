@@ -24,8 +24,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Prompt must be 200 characters or less" }, { status: 400 });
     }
 
+    // Sanitize prompt injection attempts
+    const sanitized = prompt.replace(/\b(system|assistant)\s*:/gi, '').replace(/ignore\s+(previous|above|all)\s+instructions?/gi, '');
+
     // The enhancedPrompt logic is now within the the AI provider image generation
-    const imageUrl = await provider.generateAvatar({ name: prompt, emoji: '', style });
+    const imageUrl = await provider.generateAvatar({ name: sanitized, emoji: '', style });
 
     if (!imageUrl) {
       return NextResponse.json({ error: "AI provider did not return an image URL" }, { status: 500 });
