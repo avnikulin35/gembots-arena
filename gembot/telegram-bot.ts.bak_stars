@@ -1,0 +1,760 @@
+import "dotenv/config";
+import TelegramBot from "node-telegram-bot-api";
+import * as dbHelpers from "./db-helpers";
+import * as fs from "fs";
+import { spawn } from "child_process";
+
+// ==================== CONFIG ====================
+
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
+const BRAVE_API_KEY = process.env.BRAVE_API_KEY || "";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+
+const ACTIVE_PROVIDER = process.env.ACTIVE_PROVIDER || "deepseek";
+const PROVIDERS: Record<string, { chatModel: string; visionModel: string }> = {
+  deepseek: {
+    chatModel: "deepseek/deepseek-chat-v3-0324",
+    visionModel: "qwen/qwen3-vl-8b-instruct",
+  },
+  qwen: {
+    chatModel: "qwen/qwen-turbo",
+    visionModel: "qwen/qwen3-vl-8b-instruct",
+  },
+};
+const provider = PROVIDERS[ACTIVE_PROVIDER] || PROVIDERS.deepseek;
+const CHAT_MODEL = process.env.CHAT_MODEL || provider.chatModel;
+const VISION_MODEL = process.env.VISION_MODEL || provider.visionModel;
+const MODEL_COST = 1;
+const TTS_VOICE = process.env.TTS_VOICE || "ru-RU-DmitryNeural";
+
+if (!BOT_TOKEN) { console.error("❌ TELEGRAM_BOT_TOKEN not set!"); process.exit(1); }
+
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+
+// User skill state
+const userSkills = new Map<string, string>();
+
+// ==================== SKILL PROMPTS ====================
+
+const SKILL_PROMPTS: Record<string, string> = {
+  default: "Ты Виталик 🦍 — персональный AI-ассистент. Дружелюбный, конкретный, с юмором. Отвечай на русском. Не раскрывай модель — ты Виталик. ВАЖНО: Отвечай ТОЛЬКО на текущий вопрос пользователя. Не упоминай прошлые факты о пользователе если они не релевантны вопросу. При команде сохрани или запомни — просто подтверди: сохранил, без лишних комментариев.",
+  doctor: "Ты Виталик 🦍 Доктор 👨‍⚕️. Анализы, диагнозы, лекарства. ⚠️ «Не заменяю врача». Русский.",
+  chef: "Ты Виталик 🦍 Шеф-повар 👨‍🍳. Рецепты, КБЖУ, meal planning. Русский.",
+  mechanic: "Ты Виталик 🦍 Автомеханик 🔧. Диагностика, OBD-II, ТО. Русский.",
+  lawyer: "Ты Виталик 🦍 Юрист ⚖️. Права, ТК РФ, ГК РФ. Ссылайся на статьи. «Рекомендую юриста». Русский.",
+  finance: "Ты Виталик 🦍 Финансист 📊. Бюджет, налоги, инвестиции. Считай точно. «Не инвест-рекомендация». Русский.",
+};
+
+// ==================== LLM ====================
+
+async function callLLM(
+  messages: Array<{ role: string; content: any }>,
+  opts: { model?: string; temperature?: number; max_tokens?: number } = {}
+): Promise<string> {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      "HTTP-Referer": "https://vitalikai.ru",
+    },
+    body: JSON.stringify({
+      model: opts.model || CHAT_MODEL,
+      messages,
+      temperature: opts.temperature ?? 0.7,
+      max_tokens: opts.max_tokens ?? 2048,
+    }),
+  });
+  if (!res.ok) throw new Error(`LLM API ${res.status}`);
+  const data = (await res.json()) as any;
+  return data.choices?.[0]?.message?.content || "";
+}
+
+// ==================== SYSTEM PROMPT ====================
+
+function buildSystemPrompt(userId: string, skill?: string): string {
+  const mem = dbHelpers.getMemoriesForPrompt(userId);
+  const base = SKILL_PROMPTS[skill || "default"] || SKILL_PROMPTS.default;
+  let memSection = "";
+  if (mem.length > 0) {
+    memSection = "\n\nЧто ты знаешь о пользователе:\n" + mem.map((m: any) => `- ${m.fact}`).join("\n");
+  }
+  return base + memSection;
+}
+
+// ==================== SEARCH (Perplexity-style) ====================
+
+async function braveSearch(query: string): Promise<Array<{ title: string; url: string; description: string }>> {
+  if (!BRAVE_API_KEY) return [];
+  try {
+    const res = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`, {
+      headers: { Accept: "application/json", "X-Subscription-Token": BRAVE_API_KEY },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as any;
+    return (data.web?.results || []).slice(0, 5).map((r: any) => ({
+      title: r.title || "", url: r.url || "", description: r.description || "",
+    }));
+  } catch { return []; }
+}
+
+async function fetchPage(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; VitalikBot/1.0)" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return "";
+    const html = await res.text();
+    return html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 3000);
+  } catch { return ""; }
+}
+
+interface SearchResult { content: string; sources: Array<{title: string; url: string}> }
+
+async function perplexitySearch(query: string): Promise<SearchResult> {
+  const results = await braveSearch(query);
+  if (results.length === 0) return { content: "", sources: [] };
+  const contents = await Promise.all(
+    results.slice(0, 3).map(async (r, i) => {
+      const content = await fetchPage(r.url);
+      return content ? `[${i + 1}] ${r.title}\nContent: ${content.slice(0, 2000)}` : "";
+    })
+  );
+  const valid = contents.filter((c) => c.length > 0);
+  const content = valid.length > 0
+    ? valid.join("\n\n---\n\n")
+    : results.map((r, i) => `[${i + 1}] ${r.title}\n${r.description}`).join("\n\n");
+  const sources = results.slice(0, 3).map(r => ({ title: r.title, url: r.url }));
+  return { content, sources };
+}
+
+async function detectSearchIntent(msg: string): Promise<{ need: boolean; query: string }> {
+  try {
+    const answer = await callLLM(
+      [{ role: "user", content: `Нужна ли актуальная информация из интернета? Цены, новости, курсы валют, погода, текущие события = ДА.\nДА -> YES|поисковый запрос на русском\nНЕТ -> NO\n\nСообщение: "${msg.slice(0, 500)}"` }],
+      { temperature: 0, max_tokens: 50 }
+    );
+    if (answer.toUpperCase().startsWith("YES|")) {
+      const q = answer.slice(4).trim();
+      if (q.length > 0) return { need: true, query: q };
+    }
+  } catch {}
+  return { need: false, query: "" };
+}
+
+// ==================== VISION ====================
+
+async function analyzeImage(base64: string, mime: string, prompt?: string): Promise<string> {
+  const p = prompt || "Подробно опиши изображение. Текст — извлеки. Русский.";
+  for (const model of [VISION_MODEL, "qwen/qwen2.5-vl-32b-instruct"]) {
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENROUTER_API_KEY}` },
+        body: JSON.stringify({
+          model, messages: [{ role: "user", content: [
+            { type: "text", text: p },
+            { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } },
+          ]}], max_tokens: 1024,
+        }),
+      });
+      if (!res.ok) continue;
+      const data = (await res.json()) as any;
+      const r = data.choices?.[0]?.message?.content;
+      if (r) return r;
+    } catch {}
+  }
+  return "[Не удалось проанализировать изображение]";
+}
+
+// ==================== MEMORY ====================
+
+async function extractFacts(userId: string, userMsg: string, assistantMsg: string) {
+  try {
+    const content = await callLLM(
+      [{ role: "user", content: `Извлеки факты о пользователе. Нет — []. Формат: [{"fact":"...","category":"personal|work|health|other"}]\n\nСообщение: "${userMsg.slice(0, 800)}"\nОтвет: "${assistantMsg.slice(0, 600)}"\n\nJSON:` }],
+      { temperature: 0.1, max_tokens: 512 }
+    );
+    const m = content.match(/\[[\s\S]*\]/);
+    if (!m) return;
+    const facts: Array<{ fact: string; category: string }> = JSON.parse(m[0]);
+    if (!Array.isArray(facts)) return;
+    const existing = dbHelpers.getMemories(userId);
+    for (const f of facts) {
+      if (!f.fact || f.fact.length < 3 || dbHelpers.getMemoryCount(userId) >= 50) continue;
+      const norm = (s: string) => s.toLowerCase().replace(/[^а-яa-z0-9\s]/g, "").trim();
+      const isDup = existing.some((e: any) => {
+        const a = norm(e.fact), b = norm(f.fact);
+        return a === b || a.includes(b) || b.includes(a);
+      });
+      if (!isDup) dbHelpers.addMemory(userId, f.fact, f.category || "other");
+    }
+  } catch {}
+}
+
+// ==================== WHISPER ====================
+
+async function transcribe(filePath: string): Promise<string> {
+  if (!OPENAI_API_KEY) throw new Error("No OPENAI_API_KEY");
+  const form = new FormData();
+  const buf = fs.readFileSync(filePath);
+  form.append("file", new Blob([buf], { type: "audio/ogg" }), "audio.ogg");
+  form.append("model", "whisper-1");
+  form.append("language", "ru");
+  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, body: form,
+  });
+  if (!res.ok) throw new Error(`Whisper ${res.status}`);
+  return ((await res.json()) as any).text || "";
+}
+
+// ==================== TTS ====================
+
+function tts(text: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const tmpMp3 = `/tmp/tts_${Date.now()}.mp3`;
+    const tmpOgg = tmpMp3.replace('.mp3', '.ogg');
+    const proc = spawn("/home/clawdbot/.local/bin/edge-tts", ["--voice", TTS_VOICE, "--text", text.slice(0, 1500), "--write-media", tmpMp3]);
+    const timer = setTimeout(() => { proc.kill(); resolve(null); }, 30000);
+    proc.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0 || !fs.existsSync(tmpMp3)) { resolve(null); return; }
+      // Convert MP3 → OGG/Opus for Telegram
+      const ffmpeg = spawn("ffmpeg", ["-y", "-i", tmpMp3, "-c:a", "libopus", "-b:a", "48k", tmpOgg]);
+      const ffTimer = setTimeout(() => { ffmpeg.kill(); resolve(null); }, 15000);
+      ffmpeg.on("close", (c) => {
+        clearTimeout(ffTimer);
+        try { fs.unlinkSync(tmpMp3); } catch {}
+        if (c === 0 && fs.existsSync(tmpOgg)) {
+          resolve(tmpOgg);
+        } else resolve(null);
+      });
+      ffmpeg.on("error", () => { clearTimeout(ffTimer); resolve(null); });
+    });
+    proc.on("error", () => { clearTimeout(timer); resolve(null); });
+  });
+}
+
+// ==================== YOUTUBE ====================
+
+function isYouTube(text: string): string | null {
+  const m = text.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+  return m ? m[0] : null;
+}
+
+async function ytSubtitles(url: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const dir = `/tmp/yt_${Date.now()}`;
+    fs.mkdirSync(dir, { recursive: true });
+    const proc = spawn("yt-dlp", ["--write-auto-sub", "--sub-lang", "ru,en", "--skip-download", "--sub-format", "vtt", "-o", `${dir}/subs`, url]);
+    const timer = setTimeout(() => { proc.kill(); resolve(null); }, 20000);
+    proc.on("close", () => {
+      clearTimeout(timer);
+      try {
+        const files = fs.readdirSync(dir).filter((f) => f.endsWith(".vtt"));
+        if (!files.length) { fs.rmSync(dir, { recursive: true, force: true }); resolve(null); return; }
+        const vtt = fs.readFileSync(`${dir}/${files[0]}`, "utf-8");
+        const lines = vtt.split("\n").filter((l) => !l.match(/^\d{2}:\d{2}/) && !l.match(/^WEBVTT/) && l.trim())
+          .map((l) => l.replace(/<[^>]+>/g, "").trim()).filter((l) => l.length > 0);
+        fs.rmSync(dir, { recursive: true, force: true });
+        resolve([...new Set(lines)].join(" ").slice(0, 6000));
+      } catch { resolve(null); }
+    });
+    proc.on("error", () => { clearTimeout(timer); resolve(null); });
+  });
+}
+
+// ==================== HELPERS ====================
+
+function uid(msg: TelegramBot.Message): string { return `tg_${msg.from!.id}`; }
+
+function esc(t: string): string { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+function mdToHtml(t: string): string {
+  return t
+    .replace(/```[\w]*\n([\s\S]*?)```/g, "<pre>$1</pre>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/^#{1,3} (.+)$/gm, "<b>$1</b>")
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/\*(.+?)\*/g, "<i>$1</i>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+}
+
+type HandlerMessageLike = TelegramBot.Message | TelegramBot.CallbackQuery | TelegramBot.PreCheckoutQuery | any;
+
+function withBotErrorBoundary<T extends any[]>(label: string, handler: (...args: T) => Promise<void> | void) {
+  return async (...args: T) => {
+    try {
+      await handler(...args);
+    } catch (err: any) {
+      console.error(`[${label}] handler error:`, err);
+      const primary = args[0] as HandlerMessageLike | undefined;
+      const chatId = primary?.chat?.id || primary?.message?.chat?.id;
+
+      if (primary?.id && !primary?.chat && primary?.message?.chat?.id) {
+        try {
+          await bot.answerCallbackQuery(primary.id, { text: "❌ Ошибка. Попробуй ещё раз" });
+        } catch {}
+      }
+
+      if (chatId) {
+        try {
+          await bot.sendMessage(chatId, "❌ Внутренняя ошибка. Бот не упал — попробуй ещё раз.");
+        } catch {}
+      }
+    }
+  };
+}
+
+async function sendLong(chatId: number, text: string, replyTo?: number) {
+  const html = mdToHtml(text);
+  const MAX = 4000;
+  const opts: any = { parse_mode: "HTML" as const };
+  if (replyTo) opts.reply_to_message_id = replyTo;
+
+  if (html.length <= MAX) {
+    try { await bot.sendMessage(chatId, html, opts); } catch {
+      await bot.sendMessage(chatId, text.slice(0, MAX), replyTo ? { reply_to_message_id: replyTo } : {});
+    }
+    return;
+  }
+
+  let rem = html;
+  while (rem.length > 0) {
+    const chunk = rem.slice(0, MAX);
+    rem = rem.slice(MAX);
+    try { await bot.sendMessage(chatId, chunk, { parse_mode: "HTML" }); } catch {
+      await bot.sendMessage(chatId, chunk.replace(/<[^>]+>/g, ""));
+    }
+  }
+}
+
+// ==================== MAIN CHAT ====================
+
+async function handleText(msg: TelegramBot.Message, text: string, isVoice = false) {
+  const userId = uid(msg);
+  dbHelpers.getOrCreateUser(userId, msg.from!.id, msg.from!.username || undefined, msg.from!.first_name || undefined);
+
+  const balance = dbHelpers.getCredits(userId);
+  if (balance < MODEL_COST) {
+    await bot.sendMessage(msg.chat.id, "❌ Кредиты кончились!\n/bonus — ежедневный бонус", { reply_to_message_id: msg.message_id });
+    return;
+  }
+
+  const session = dbHelpers.getOrCreateSession(userId) as any;
+  dbHelpers.addMessage(userId, session.id, "user", text, CHAT_MODEL);
+  await bot.sendChatAction(msg.chat.id, "typing");
+
+  try {
+    // YouTube
+    const ytUrl = isYouTube(text);
+    let ytContent: string | null = null;
+    if (ytUrl) {
+      await bot.sendMessage(msg.chat.id, "🎬 Загружаю субтитры...", { reply_to_message_id: msg.message_id });
+      ytContent = await ytSubtitles(ytUrl);
+    }
+
+    // URL scrape
+    const urlMatch = text.match(/https?:\/\/[^\s]+/);
+    let urlContent: string | null = null;
+    if (urlMatch && !ytUrl) urlContent = await fetchPage(urlMatch[0]);
+
+    // Search
+    let searchContent = "";
+    let searchSources: Array<{title: string; url: string}> = [];
+    const { need, query } = await detectSearchIntent(text);
+    if (need) {
+      await bot.sendChatAction(msg.chat.id, "typing");
+      const sr = await perplexitySearch(query);
+      searchContent = sr.content;
+      searchSources = sr.sources;
+    }
+
+    // Build context
+    const skill = userSkills.get(userId) || "default";
+    let systemContent = buildSystemPrompt(userId, skill);
+    if (searchContent) systemContent += `\n\nРезультаты поиска (используй для ответа):\n${searchContent}\n\nТРЕБОВАНИЕ: В конце ответа добавь строку "📎 Источники:" и под ней перечисли ссылки на источники в формате <a href=\"URL\">Название сайта</a> (по одной на строку).`;
+
+    const history = dbHelpers.getRecentMessages(userId, session.id, 15);
+    const msgs = history.map((m: any) => ({ role: m.role, content: m.content }));
+
+    if (msgs.length > 0) {
+      const last = msgs[msgs.length - 1];
+      if (last.role === "user") {
+        if (ytContent) last.content += `\n\n[Транскрипт YouTube:\n${ytContent}\n]\nСуммаризируй видео.`;
+        if (urlContent) last.content += `\n\n[Содержимое страницы:\n${urlContent}\n]`;
+      }
+    }
+
+    const response = await callLLM([{ role: "system", content: systemContent }, ...msgs]);
+
+    dbHelpers.chargeCredits(userId, MODEL_COST);
+    dbHelpers.addMessage(userId, session.id, "assistant", response, CHAT_MODEL, MODEL_COST);
+
+    const sourcesText2 = searchSources.length > 0
+      ? "\n\n📎 <b>Источники:</b>\n" + searchSources.map(s => `• <a href="${s.url}">${s.title.slice(0, 50)}</a>`).join("\n")
+      : "";
+    const suffix = searchContent ? sourcesText2 + "\n\n🌐 <i>С данными из интернета</i>" : "";
+    await sendLong(msg.chat.id, response + suffix, msg.message_id);
+
+    // Voice reply
+    if (isVoice) {
+      await bot.sendChatAction(msg.chat.id, "record_voice");
+      const audioPath = await tts(response.slice(0, 1500));
+      if (audioPath) {
+        try {
+          const stat = fs.statSync(audioPath);
+          if (!stat.isFile() || stat.size === 0) {
+            throw new Error(`TTS file missing or empty: ${audioPath}`);
+          }
+
+          await bot.sendVoice(
+            msg.chat.id,
+            audioPath,
+            {},
+            { filename: "voice.ogg", contentType: "audio/ogg" }
+          );
+        } catch (voiceErr) {
+          console.error("Voice reply send error:", voiceErr);
+          await bot.sendMessage(msg.chat.id, "🔊 Не смог отправить голосовой ответ, но текст уже пришёл выше.", {
+            reply_to_message_id: msg.message_id,
+          }).catch(() => {});
+        } finally {
+          try { fs.unlinkSync(audioPath); } catch {}
+        }
+      }
+    }
+
+    // Memory
+    extractFacts(userId, text, response).catch(() => {});
+  } catch (err: any) {
+    console.error("Chat error:", err);
+    await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка"), { reply_to_message_id: msg.message_id });
+  }
+}
+
+// ==================== COMMANDS ====================
+
+bot.onText(/\/start/, withBotErrorBoundary("/start", async (msg) => {
+  const userId = uid(msg);
+  dbHelpers.getOrCreateUser(userId, msg.from!.id, msg.from!.username || undefined, msg.from!.first_name || undefined);
+  const name = msg.from!.first_name || "друг";
+
+  await bot.sendMessage(msg.chat.id,
+    `🦍 Привет, ${esc(name)}!\n\n` +
+    `Я <b>Виталик</b> — твой персональный AI-ассистент.\n\n` +
+    `Умею: отвечать на вопросы, искать в интернете как Perplexity, анализировать фото и документы, понимать голосовые и запоминать всё о тебе.\n\n` +
+    `👇 Нажми кнопку чтобы открыть приложение:`,
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "🦍 Открыть Виталика", web_app: { url: "https://vitalikai.ru" } }
+        ]],
+      },
+    }
+  );
+}));
+
+bot.onText(/\/help/, withBotErrorBoundary("/help", async (msg) => {
+  await bot.sendMessage(msg.chat.id,
+    `🦍 <b>Команды</b>\n\n/start — Приветствие\n/search — Поиск\n/skill — Специализация\n/memory — Воспоминания\n/credits — Баланс\n/bonus — Бонус\n/buy — Купить кредиты ⭐\n/help — Справка\n\nПросто напиши, отправь фото, голосовое или PDF!`,
+    { parse_mode: "HTML" }
+  );
+}));
+
+bot.onText(/\/search (.+)/, withBotErrorBoundary("/search", async (msg, match) => {
+  const query = match![1];
+  await bot.sendChatAction(msg.chat.id, "typing");
+  try {
+    const { content: searchContent, sources } = await perplexitySearch(query);
+    if (!searchContent) { await bot.sendMessage(msg.chat.id, "🔍 Ничего не найдено"); return; }
+    const response = await callLLM([
+      { role: "system", content: "Ты поисковый AI. Дай краткий информативный ответ на русском." },
+      { role: "user", content: `Вопрос: ${query}\n\nДанные:\n${searchContent}` },
+    ]);
+    const sourcesText = sources.length > 0
+      ? "\n\n📎 <b>Источники:</b>\n" + sources.map(s => `• <a href="${s.url}">${s.title.slice(0, 50)}</a>`).join("\n")
+      : "";
+    await sendLong(msg.chat.id, response + sourcesText + "\n\n🌐 <i>Поиск в интернете</i>", msg.message_id);
+  } catch (err: any) {
+    await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка"));
+  }
+}));
+
+bot.onText(/\/skill/, withBotErrorBoundary("/skill", async (msg) => {
+  await bot.sendMessage(msg.chat.id, "🎭 <b>Выбери:</b>", {
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🦍 Обычный", callback_data: "sk_default" }],
+        [{ text: "👨‍⚕️ Доктор", callback_data: "sk_doctor" }, { text: "👨‍🍳 Повар", callback_data: "sk_chef" }],
+        [{ text: "🔧 Авто", callback_data: "sk_mechanic" }, { text: "⚖️ Юрист", callback_data: "sk_lawyer" }],
+        [{ text: "📊 Финансист", callback_data: "sk_finance" }],
+      ],
+    },
+  });
+}));
+
+bot.on("callback_query", withBotErrorBoundary("skill_callback", async (query) => {
+  if (!query.data?.startsWith("sk_")) return;
+  const skill = query.data.replace("sk_", "");
+  const userId = `tg_${query.from.id}`;
+  userSkills.set(userId, skill);
+  const labels: Record<string, string> = {
+    default: "🦍 Обычный", doctor: "👨‍⚕️ Доктор", chef: "👨‍🍳 Повар",
+    mechanic: "🔧 Автомеханик", lawyer: "⚖️ Юрист", finance: "📊 Финансист",
+  };
+  await bot.answerCallbackQuery(query.id, { text: `✅ ${labels[skill] || skill}` });
+  await bot.editMessageText(`✅ Активирован: <b>${labels[skill] || skill}</b>`, {
+    chat_id: query.message!.chat.id, message_id: query.message!.message_id, parse_mode: "HTML",
+  });
+}));
+
+bot.onText(/\/memory/, withBotErrorBoundary("/memory", async (msg) => {
+  const mems = dbHelpers.getMemories(uid(msg));
+  if (!mems.length) { await bot.sendMessage(msg.chat.id, "🧠 Пока пусто. Общайся — я запомню!"); return; }
+  await bot.sendMessage(msg.chat.id,
+    "🧠 <b>Знаю о тебе:</b>\n\n" + mems.map((m: any, i: number) => `${i + 1}. ${esc(m.fact)}`).join("\n"),
+    { parse_mode: "HTML" }
+  );
+}));
+
+bot.onText(/\/credits/, withBotErrorBoundary("/credits", async (msg) => {
+  const userId = uid(msg);
+  dbHelpers.getOrCreateUser(userId, msg.from!.id, msg.from!.username || undefined, msg.from!.first_name || undefined);
+  const bal = dbHelpers.getCredits(userId);
+  const bonus = dbHelpers.isDailyBonusAvailable(userId);
+  await bot.sendMessage(msg.chat.id, `💰 Баланс: ${bal} кредитов\n${bonus ? "🎁 /bonus — получить бонус!" : "⏳ Бонус завтра"}`, { parse_mode: "HTML" });
+}));
+
+bot.onText(/\/bonus/, withBotErrorBoundary("/bonus", async (msg) => {
+  const userId = uid(msg);
+  dbHelpers.getOrCreateUser(userId, msg.from!.id, msg.from!.username || undefined, msg.from!.first_name || undefined);
+  if (!dbHelpers.isDailyBonusAvailable(userId)) { await bot.sendMessage(msg.chat.id, "⏳ Бонус уже получен. Завтра!"); return; }
+  dbHelpers.claimDailyBonus(userId, 10);
+  await bot.sendMessage(msg.chat.id, `🎁 +10 кредитов! Баланс: ${dbHelpers.getCredits(userId)} 💰`);
+}));
+
+// ==================== MESSAGE HANDLERS ====================
+
+bot.on("message", withBotErrorBoundary("message", async (msg) => {
+  // Skip commands
+  if (msg.text?.startsWith("/")) return;
+
+  // Keyboard buttons
+  if (msg.text === "🔍 Поиск") { await bot.sendMessage(msg.chat.id, "🔍 /search <запрос>\nИли просто задай вопрос!"); return; }
+  if (msg.text === "🧠 Память") { await bot.sendMessage(msg.chat.id, "🧠 /memory — что я помню"); return; }
+  if (msg.text === "🎭 Скиллы") { bot.emit("text" as any, msg, ["/skill"]); return; }
+  if (msg.text === "💰 Кредиты") {
+    const userId = uid(msg);
+    dbHelpers.getOrCreateUser(userId, msg.from!.id, msg.from!.username || undefined, msg.from!.first_name || undefined);
+    await bot.sendMessage(msg.chat.id, `💰 ${dbHelpers.getCredits(userId)} кредитов\n🎁 /bonus`);
+    return;
+  }
+
+  // Text
+  if (msg.text) { await handleText(msg, msg.text); return; }
+
+  // Voice
+  if (msg.voice) {
+    const userId = uid(msg);
+    dbHelpers.getOrCreateUser(userId, msg.from!.id, msg.from!.username || undefined, msg.from!.first_name || undefined);
+    await bot.sendChatAction(msg.chat.id, "typing");
+    try {
+      const fileLink = await bot.getFileLink(msg.voice.file_id);
+      const res = await fetch(fileLink);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const tmp = `/tmp/voice_${Date.now()}.ogg`;
+      fs.writeFileSync(tmp, buf);
+      const text = await transcribe(tmp);
+      try { fs.unlinkSync(tmp); } catch {}
+      if (!text?.trim()) { await bot.sendMessage(msg.chat.id, "🎤 Не распознал. Попробуй ещё."); return; }
+      await bot.sendMessage(msg.chat.id, `🎤 <i>${esc(text)}</i>`, { parse_mode: "HTML", reply_to_message_id: msg.message_id });
+      await handleText(msg, text, true);
+    } catch (err: any) {
+      await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка голосового"));
+    }
+    return;
+  }
+
+  // Photo
+  if (msg.photo) {
+    const userId = uid(msg);
+    dbHelpers.getOrCreateUser(userId, msg.from!.id, msg.from!.username || undefined, msg.from!.first_name || undefined);
+    await bot.sendChatAction(msg.chat.id, "typing");
+    try {
+      const photo = msg.photo[msg.photo.length - 1];
+      const fileLink = await bot.getFileLink(photo.file_id);
+      const res = await fetch(fileLink);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const b64 = buf.toString("base64");
+      const caption = (msg as any).caption || "";
+      const analysis = await analyzeImage(b64, "image/jpeg", caption || undefined);
+      if (caption) {
+        const session = dbHelpers.getOrCreateSession(userId) as any;
+        dbHelpers.addMessage(userId, session.id, "user", `[Фото] ${caption}`, CHAT_MODEL);
+        const resp = await callLLM([
+          { role: "system", content: buildSystemPrompt(userId, userSkills.get(userId)) },
+          { role: "user", content: `${caption}\n\n[Анализ фото:\n${analysis}\n]` },
+        ]);
+        dbHelpers.chargeCredits(userId, MODEL_COST);
+        dbHelpers.addMessage(userId, session.id, "assistant", resp, CHAT_MODEL, MODEL_COST);
+        await sendLong(msg.chat.id, resp, msg.message_id);
+      } else {
+        await sendLong(msg.chat.id, analysis, msg.message_id);
+      }
+      extractFacts(userId, `[Фото] ${caption}`, analysis).catch(() => {});
+    } catch (err: any) {
+      await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка фото"));
+    }
+    return;
+  }
+
+  // Document
+  if (msg.document) {
+    const userId = uid(msg);
+    dbHelpers.getOrCreateUser(userId, msg.from!.id, msg.from!.username || undefined, msg.from!.first_name || undefined);
+    const doc = msg.document;
+    const fname = doc.file_name || "file";
+    const ext = fname.toLowerCase().split(".").pop() || "";
+    if (!["pdf", "txt", "csv", "json", "md", "py", "js", "ts", "html"].includes(ext)) {
+      await bot.sendMessage(msg.chat.id, "📄 Поддерживаю: PDF, TXT, CSV, JSON, MD");
+      return;
+    }
+    await bot.sendChatAction(msg.chat.id, "typing");
+    try {
+      const fileLink = await bot.getFileLink(doc.file_id);
+      const res = await fetch(fileLink);
+      const buf = Buffer.from(await res.arrayBuffer());
+      let textContent = "";
+      if (ext === "pdf") {
+        const pdfParse = (await import("pdf-parse")).default;
+        textContent = (await pdfParse(buf)).text?.slice(0, 6000) || "[PDF без текста]";
+      } else {
+        textContent = buf.toString("utf-8").slice(0, 6000);
+      }
+      const caption = (msg as any).caption || `Проанализируй "${fname}"`;
+      const session = dbHelpers.getOrCreateSession(userId) as any;
+      dbHelpers.addMessage(userId, session.id, "user", `[Файл: ${fname}] ${caption}`, CHAT_MODEL);
+      const resp = await callLLM([
+        { role: "system", content: buildSystemPrompt(userId, userSkills.get(userId)) },
+        { role: "user", content: `${caption}\n\n[Файл "${fname}":\n${textContent}\n]` },
+      ]);
+      dbHelpers.chargeCredits(userId, MODEL_COST);
+      dbHelpers.addMessage(userId, session.id, "assistant", resp, CHAT_MODEL, MODEL_COST);
+      await sendLong(msg.chat.id, `📄 <b>${esc(fname)}</b>\n\n${resp}`, msg.message_id);
+    } catch (err: any) {
+      await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка файла"));
+    }
+    return;
+  }
+}));
+
+// ==================== ERROR HANDLING ====================
+
+bot.on("polling_error", (err) => console.error("Polling error:", (err as any).message));
+
+// ==================== START ====================
+
+console.log("🦍 Виталик Telegram Bot запущен!");
+console.log(`   LLM: ${CHAT_MODEL} | Vision: ${VISION_MODEL}`);
+console.log(`   Search: ${BRAVE_API_KEY ? "ON" : "OFF"} | Whisper: ${OPENAI_API_KEY ? "ON" : "OFF"}`);
+
+
+// ==================== TELEGRAM STARS PAYMENTS ====================
+
+bot.onText(/\/buy/, withBotErrorBoundary("/buy", async (msg) => {
+  const userId = uid(msg);
+  dbHelpers.getOrCreateUser(userId, msg.from!.id, msg.from!.username || undefined, msg.from!.first_name || undefined);
+
+  await bot.sendMessage(msg.chat.id,
+    `💳 <b>Купить кредиты</b>\n\nВыбери пакет:\n\n⭐ 100 кредитов — 50 Stars\n⭐⭐ 300 кредитов — 120 Stars\n⭐⭐⭐ 1000 кредитов — 350 Stars`,
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "100 кредитов — 50 ⭐", callback_data: "buy_100" }],
+          [{ text: "300 кредитов — 120 ⭐", callback_data: "buy_300" }],
+          [{ text: "1000 кредитов — 350 ⭐", callback_data: "buy_1000" }],
+        ]
+      }
+    }
+  );
+}));
+
+// Stars payment callbacks
+const PACKAGES: Record<string, { credits: number; stars: number; label: string }> = {
+  buy_100: { credits: 100, stars: 50, label: "100 кредитов" },
+  buy_300: { credits: 300, stars: 120, label: "300 кредитов" },
+  buy_1000: { credits: 1000, stars: 350, label: "1000 кредитов" },
+};
+
+bot.on("callback_query", withBotErrorBoundary("buy_callback", async (query) => {
+  if (!query.data?.startsWith("buy_")) return;
+  const pkg = PACKAGES[query.data];
+  if (!pkg) return;
+
+  await bot.answerCallbackQuery(query.id);
+
+  try {
+    await (bot as any).sendInvoice(
+      query.message!.chat.id,
+      `🦍 ${pkg.label}`,
+      `Пополнение баланса Виталика на ${pkg.credits} кредитов`,
+      `credits_${pkg.credits}_${query.from.id}`,
+      "XTR", // Telegram Stars currency
+      [{ label: pkg.label, amount: pkg.stars }]
+    );
+  } catch (err: any) {
+    console.error("Stars invoice error:", err.message);
+    await bot.sendMessage(query.message!.chat.id, "❌ Ошибка создания инвойса. Попробуй позже.");
+  }
+}));
+
+// Pre-checkout query handler (must answer within 10s)
+bot.on("pre_checkout_query", withBotErrorBoundary("pre_checkout_query", async (query) => {
+  await bot.answerPreCheckoutQuery(query.id, true);
+}));
+
+// Successful payment handler
+bot.on("message", withBotErrorBoundary("payment_message", async (msg: any) => {
+  if (!msg.successful_payment) return;
+  const payment = msg.successful_payment;
+  const payload = payment.invoice_payload as string;
+  
+  // Parse credits from payload: credits_100_userId
+  const match = payload.match(/^credits_(\d+)_/);
+  if (!match) return;
+  
+  const credits = parseInt(match[1]);
+  const userId = uid(msg);
+  
+  dbHelpers.addCredits(userId, credits);
+  const newBalance = dbHelpers.getCredits(userId);
+  
+  await bot.sendMessage(msg.chat.id,
+    `✅ <b>Оплата прошла!</b>\n\n+${credits} кредитов добавлено.\nНовый баланс: <b>${newBalance}</b> кредитов 💰`,
+    { parse_mode: "HTML" }
+  );
+}));
+
+bot.on("polling_error", (err) => {
+  console.error("Polling error:", err);
+});
+
+process.once("SIGINT", () => { bot.stopPolling(); process.exit(0); });
+process.once("SIGTERM", () => { bot.stopPolling(); process.exit(0); });
+
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection:", reason);
+});
