@@ -362,7 +362,7 @@ export default function HomePage() {
             </div>
             <div className="rounded-xl bg-gray-900/60 border border-gray-800 p-5 text-center">
               <div className="text-2xl sm:text-3xl font-black text-white">
-                <AnimatedCounter target={stats?.totalBattles || 560000} />+
+                <AnimatedCounter target={stats?.totalBattles || 0} />+
               </div>
               <div className="text-xs text-gray-500 mt-1">Battles Resolved</div>
             </div>

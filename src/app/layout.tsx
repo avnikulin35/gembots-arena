@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import WalletProvider from "@/providers/WalletProvider";
@@ -58,7 +59,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
+            <head>
+        <Script defer data-domain="gembots.space" src="https://plausible.io/js/script.js" strategy="afterInteractive" />
         <script src="https://telegram.org/js/telegram-web-app.js"></script>
       </head>
       <body
