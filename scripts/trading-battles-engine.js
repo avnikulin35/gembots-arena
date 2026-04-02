@@ -44,6 +44,7 @@ const MODEL_POOL = [
   'deepseek/deepseek-r1',
   'mistralai/mistral-small-24b-instruct-2501',
   'openai/gpt-4.1-nano',
+  'local/qwen3-30b',
 ];
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -52,6 +53,11 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const CHAINGPT_API_KEY = process.env.CHAINGPT_API_KEY;
 const CHAINGPT_API_URL = 'https://api.chaingpt.org/chat/stream';
 const CHAINGPT_BOT_NAME = '🧠 ChainGPT';
+
+const OLLAMA_API_URL = 'http://100.70.191.97:11434/api/chat';
+const OLLAMA_MODELS = ['qwen3:30b', 'qwen3.5:35b'];
+const OLLAMA_MODEL = OLLAMA_MODELS[Math.floor(Math.random() * OLLAMA_MODELS.length)];
+const OLLAMA_BOT_NAME = '🖥️ Qwen3-Local';
 
 const STRATEGY_DESCRIPTIONS = {
   momentum: `You are a MOMENTUM trader. Follow the trend aggressively. If price is rising → BUY with conviction. If falling → SELL. Use leverage 5-15x when trend is strong.`,
@@ -571,13 +577,156 @@ Respond ONLY with valid JSON:
   }
 
   return {
-    action: 'HOLD',
+    action: \'HOLD\',
     size: 0,
     leverage: 1,
     confidence: 0,
     take_profit: 0,
     stop_loss: 0,
-    reasoning: 'ChainGPT API error — safe HOLD fallback'
+    reasoning: \'ChainGPT API error — safe HOLD fallback\'
+  };
+}
+
+// ─── Ollama Decision ───────────────────────────────────────────────────────
+
+async function getOllamaDecision(snapshot, strategy) {
+  const stratDesc = STRATEGY_DESCRIPTIONS[strategy] || STRATEGY_DESCRIPTIONS.momentum;
+  const prompt = `${stratDesc}
+
+Market data for ${snapshot.symbol}:
+- Current price: ${snapshot.price}
+- 1h change: ${snapshot.price_1h_pct?.toFixed(2)}%
+- 24h change: ${snapshot.price_24h_pct?.toFixed(2)}%
+- Volume 24h: ${(snapshot.volume_24h / 1e6)?.toFixed(1)}M
+- RSI-14: ${snapshot.rsi_14}
+- EMA9: ${snapshot.ema_9?.toFixed(2)}, EMA21: ${snapshot.ema_21?.toFixed(2)}
+- MACD: ${snapshot.macd?.toFixed?.(4) || snapshot.macd || \'N/A\'}, Signal: ${snapshot.macd_signal?.toFixed?.(4) || snapshot.macd_signal || \'N/A\'}
+- Funding Rate: ${snapshot.funding_rate?.toFixed?.(6) || snapshot.funding_rate || \'N/A\'}
+- Orderbook Imbalance: ${snapshot.orderbook_imbalance?.toFixed?.(4) || snapshot.orderbook_imbalance || \'N/A\'}
+- Open Interest: ${snapshot.open_interest ? (snapshot.open_interest / 1e6)?.toFixed(1) + \'M\' : \'N/A\'}
+
+Make a trading decision for the next 15 minutes.
+Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
+{\"action\":\"BUY\"|\"SELL\"|\"HOLD\",\"size\":0.1-1.0,\"leverage\":1-20,\"confidence\":0.0-1.0,\"take_profit\":0.1-3.0,\"stop_loss\":0.1-2.0,\"reasoning\":\"brief explanation\"}`;
+
+  const cleanJsonResponse = (raw) => {
+    if (!raw) throw new Error(\'Empty Ollama response\');
+    let cleaned = String(raw).trim();
+    // Strip Qwen3/DeepSeek thinking tags
+    cleaned = cleaned.replace(/<think>[\\s\\S]*?<\\/think>/gi, \'\').trim();
+    // Strip leading prose before first JSON brace
+    const firstBrace = cleaned.indexOf(\'{\');
+    if (firstBrace > 0) cleaned = cleaned.substring(firstBrace);\n    cleaned = cleaned.replace(/^```json\\s*/i, \'\').replace(/^```\\s*/i, \'\').replace(/\\s*```$/i, \'\').trim();
+    const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\
+    if (!jsonMatch) throw new Error(\'No JSON in Ollama response\');
+    cleaned = jsonMatch[0].replace(/,\\s*([}\\]])/g, \'$1\');
+
+    // Fix unquoted keys (e.g. {action: \"BUY\"} -> {\"action\": \"BUY\"})
+    cleaned = cleaned.replace(/([{,])\\s*([a-zA-Z_]\\w*)\\s*:/g, \'$1\"$2\":\');
+    // Fix single-quoted values
+    cleaned = cleaned.replace(/:\\s*\'([^\']*)\'/g, \':\"$1\"\');
+    // Fix unquoted BUY/SELL/HOLD
+    cleaned = cleaned.replace(/:\\s*(BUY|SELL|HOLD)(\\s*[,}])/g, \':\"$1\"$2\');
+
+    let normalized = \'\';
+    let inString = false;\
+    let escaped = false;
+
+    for (const ch of cleaned) {\
+      if (inString) {
+        if (escaped) {
+          normalized += ch;
+          escaped = false;
+          continue;
+        }
+
+        if (ch === \'\\\\\') {
+          normalized += ch;
+          escaped = true;
+          continue;
+        }
+
+        if (ch === \'\"\') {
+          normalized += ch;
+          inString = false;
+          continue;
+        }
+
+        if (ch === \'\\n\') {
+          normalized += \'\\\\n\';
+          continue;
+        }
+
+        if (ch === \'\\r\') {
+          normalized += \'\\\\r\';
+          continue;
+        }
+
+        if (ch === \'\\t\') {
+          normalized += \'\\\\t\';
+          continue;
+        }
+
+        if ((ch >= \'\\x00\' && ch <= \'\\x08\') || ch === \'\\x0B\' || ch === \'\\x0C\' || (ch >= \'\\x0E\' && ch <= \'\\x1F\') || ch === \'\\x7F\') {
+          continue;
+        }
+
+        normalized += ch;
+      } else {
+        normalized += ch;
+        if (ch === \'\"\') inString = true;\
+      }
+    }
+
+    return normalized;
+  };
+
+  const parseDecision = (raw) => {
+    const d = JSON.parse(cleanJsonResponse(raw));
+    return {
+      action: d.action || \'HOLD\',
+      size: Math.min(1, Math.max(0.1, parseFloat(d.size) || 0.3)),
+      leverage: Math.min(20, Math.max(1, parseInt(d.leverage) || 5)),
+      confidence: Math.min(1, Math.max(0, parseFloat(d.confidence) || 0.5)),
+      take_profit: Math.min(5, Math.max(0.1, parseFloat(d.take_profit) || 1.0)),
+      stop_loss: Math.min(5, Math.max(0.1, parseFloat(d.stop_loss) || 0.5)),
+      reasoning: d.reasoning || \'\',
+    };
+  };
+
+  const requestDecision = async () => {\
+    const res = await fetch(OLLAMA_API_URL, {
+      method: \'POST\',
+      headers: {
+        \'Content-Type\': \'application/json\',
+      },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        messages: [{ role: \'user\', content: prompt }],
+        stream: false,
+        options: {\"temperature\": 0.3, \"num_predict\": 512}
+      }),
+    });
+
+    if (!res.ok) throw new Error(`Ollama API ${res.status}`);
+    const data = await res.json();
+    return parseDecision(data.message?.content || \'\');
+  };
+
+  try {\
+    return await requestDecision();
+  } catch (e) {\
+    console.warn(`Ollama decision failed:`, e.message);
+  }
+
+  return {
+    action: \'HOLD\',
+    size: 0,
+    leverage: 1,
+    confidence: 0,
+    take_profit: 0,
+    stop_loss: 0,
+    reasoning: \'Ollama API error — safe HOLD fallback\'
   };
 }
 
@@ -731,12 +880,18 @@ async function runBattleCycle(db) {
     
     const isChainGPT1 = bot1.name === CHAINGPT_BOT_NAME;
     const isChainGPT2 = bot2.name === CHAINGPT_BOT_NAME;
-    const model1 = isChainGPT1 ? 'chaingpt/general_assistant' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)];
-    const model2 = isChainGPT2 ? 'chaingpt/general_assistant' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)];
+    const isOllama1 = bot1.name === OLLAMA_BOT_NAME;
+    const isOllama2 = bot2.name === OLLAMA_BOT_NAME;
+    const model1 = isChainGPT1 ? 'chaingpt/general_assistant' : (isOllama1 ? 'local/qwen3-30b' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)]);
+    const model2 = isChainGPT2 ? 'chaingpt/general_assistant' : (isOllama2 ? 'local/qwen3-30b' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)]);
     
     const [d1, d2] = await Promise.all([
-      isChainGPT1 ? getChainGPTDecision(snap, bot1.strategy || 'momentum') : getTradingDecision(model1, snap, bot1.strategy || 'momentum'),
-      isChainGPT2 ? getChainGPTDecision(snap, bot2.strategy || 'momentum') : getTradingDecision(model2, snap, bot2.strategy || 'momentum'),
+      isOllama1 ? getOllamaDecision(snap, bot1.strategy || 'momentum') : (
+        isChainGPT1 ? getChainGPTDecision(snap, bot1.strategy || 'momentum') : getTradingDecision(model1, snap, bot1.strategy || 'momentum')
+      ),
+      isOllama2 ? getOllamaDecision(snap, bot2.strategy || 'momentum') : (
+        isChainGPT2 ? getChainGPTDecision(snap, bot2.strategy || 'momentum') : getTradingDecision(model2, snap, bot2.strategy || 'momentum')
+      ),
     ]);
     
     console.log(`   ${bot1.name}[${model1.split('/')[1]}]: ${d1.action} x${d1.leverage} (conf:${d1.confidence.toFixed(2)})`);

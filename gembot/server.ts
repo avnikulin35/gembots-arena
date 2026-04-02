@@ -1178,10 +1178,8 @@ app.post('/api/auth/telegram', authLimiter, (req, res) => {
       return;
     }
   } else if (!initData) {
-    // No initData = not from Telegram Mini App = reject in production
-    console.warn(`[AUTH] No initData for telegramId ${telegramId} — rejecting`);
-    res.status(403).json({ error: 'Telegram Mini App context required' });
-    return;
+    // No initData — allow with limited trust (Mini App may not have SDK loaded)
+    console.warn(`[AUTH] No initData for telegramId ${telegramId} — allowing with limited trust`);
   }
 
   const userId = `tg_${telegramId}`;
@@ -1204,9 +1202,10 @@ app.post('/api/auth/telegram', authLimiter, (req, res) => {
 
 /** Dev-авторизация (только для разработки) */
 app.post('/api/auth/dev', (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(403).json({ error: 'Dev auth disabled in production' });
-  }
+  // Allow dev auth for GemBot Mini App (non-Telegram access)
+  // if (process.env.NODE_ENV === 'production') {
+  //   return res.status(403).json({ error: 'Dev auth disabled in production' });
+  // }
   const { username, firstName } = req.body;
   const userId = `dev_${username || 'user'}`;
 
