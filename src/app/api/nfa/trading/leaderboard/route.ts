@@ -75,6 +75,7 @@ function getTournamentLeaderboard(db: Database.Database) {
     SELECT
       te.bot_id,
       ab.name AS bot_name,
+      ab.nfa_id,
       te.elo,
       te.wins,
       te.losses,
@@ -100,7 +101,7 @@ function getTournamentLeaderboard(db: Database.Database) {
     return {
       rank: i + 1,
       bot_id: e.bot_id,
-      nfa_id: participant?.nfa_id || null,
+      nfa_id: participant?.nfa_id ?? e.nfa_id ?? null,
       bot_name: e.bot_name,
       strategy: participant?.strategy || 'default',
       pnl_usd: e.total_pnl,
@@ -120,6 +121,7 @@ function getAllTimeLeaderboard(db: Database.Database) {
     SELECT
       te.bot_id,
       ab.name AS bot_name,
+      ab.nfa_id,
       te.elo,
       te.wins,
       te.losses,
@@ -138,7 +140,7 @@ function getAllTimeLeaderboard(db: Database.Database) {
   const ranked = entries.map((e: any, i: number) => ({
     rank: i + 1,
     bot_id: e.bot_id,
-    nfa_id: null,
+    nfa_id: e.nfa_id ?? null,
     bot_name: e.bot_name,
     strategy: 'default',
     pnl_usd: e.total_pnl,
@@ -156,15 +158,15 @@ function getWeeklyLeaderboard(db: Database.Database) {
 
   // Aggregate PnL from resolved battles in last 7 days, per bot
   const rows = db.prepare(`
-    SELECT bot_id, bot_name, SUM(pnl) as total_pnl, COUNT(*) as trades,
+    SELECT bot_id, bot_name, nfa_id, SUM(pnl) as total_pnl, COUNT(*) as trades,
            SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins
     FROM (
-      SELECT bot1_id AS bot_id, ab1.name AS bot_name, bot1_pnl AS pnl
+      SELECT bot1_id AS bot_id, ab1.name AS bot_name, ab1.nfa_id, bot1_pnl AS pnl
       FROM trading_battles tb
       JOIN api_bots ab1 ON tb.bot1_id = ab1.id
       WHERE tb.status = 'resolved' AND tb.resolved_at >= ?
       UNION ALL
-      SELECT bot2_id AS bot_id, ab2.name AS bot_name, bot2_pnl AS pnl
+      SELECT bot2_id AS bot_id, ab2.name AS bot_name, ab2.nfa_id, bot2_pnl AS pnl
       FROM trading_battles tb
       JOIN api_bots ab2 ON tb.bot2_id = ab2.id
       WHERE tb.status = 'resolved' AND tb.resolved_at >= ?
@@ -176,7 +178,7 @@ function getWeeklyLeaderboard(db: Database.Database) {
   const entries = rows.map((r: any, i: number) => ({
     rank: i + 1,
     bot_id: r.bot_id,
-    nfa_id: null,
+    nfa_id: r.nfa_id ?? null,
     bot_name: r.bot_name,
     strategy: 'default',
     pnl_usd: r.total_pnl,
@@ -193,6 +195,7 @@ function getLegacyLeaderboard(db: Database.Database) {
     SELECT
       ab.id,
       ab.name,
+      ab.nfa_id,
       ab.wallet_address AS trading_wallet_address,
       te.elo,
       te.wins,
@@ -211,7 +214,7 @@ function getLegacyLeaderboard(db: Database.Database) {
 
   const result = bots.map((bot: any) => ({
     id: bot.id,
-    nfa_id: null,
+    nfa_id: bot.nfa_id ?? null,
     name: bot.name,
     trading_wallet_address: bot.trading_wallet_address,
     trading_mode: 'paper',

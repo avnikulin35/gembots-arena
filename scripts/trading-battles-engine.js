@@ -32,7 +32,8 @@ const { v4: uuidv4 } = require('uuid');
 const DB_PATH = path.join(__dirname, '..', 'data', 'gembots.db');
 const SNAPSHOTS_PATH = '/home/clawdbot/Projects/gembots-trader/data/market-snapshots.jsonl';
 const FETCH_SNAPSHOTS_SCRIPT = '/tmp/fetch-market-snapshots.js';
-const BATTLE_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const BATTLE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes (increased from 15 for volume growth)
+const BATTLES_PER_SYMBOL = 3; // 3 pairs per symbol per cycle = 9 battles/cycle (~2592/day)
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 
 const MODEL_POOL = [
@@ -56,7 +57,6 @@ const CHAINGPT_BOT_NAME = '🧠 ChainGPT';
 
 const OLLAMA_API_URL = 'http://100.70.191.97:11434/api/chat';
 const OLLAMA_MODELS = ['qwen3:30b', 'qwen3.5:35b'];
-const OLLAMA_MODEL = OLLAMA_MODELS[Math.floor(Math.random() * OLLAMA_MODELS.length)];
 const OLLAMA_BOT_NAME = '🖥️ Qwen3-Local';
 
 const STRATEGY_DESCRIPTIONS = {
@@ -577,13 +577,13 @@ Respond ONLY with valid JSON:
   }
 
   return {
-    action: \'HOLD\',
+    action: 'HOLD',
     size: 0,
     leverage: 1,
     confidence: 0,
     take_profit: 0,
     stop_loss: 0,
-    reasoning: \'ChainGPT API error — safe HOLD fallback\'
+    reasoning: 'ChainGPT API error — safe HOLD fallback'
   };
 }
 
@@ -591,6 +591,7 @@ Respond ONLY with valid JSON:
 
 async function getOllamaDecision(snapshot, strategy) {
   const stratDesc = STRATEGY_DESCRIPTIONS[strategy] || STRATEGY_DESCRIPTIONS.momentum;
+  const ollamaModel = OLLAMA_MODELS[Math.floor(Math.random() * OLLAMA_MODELS.length)];
   const prompt = `${stratDesc}
 
 Market data for ${snapshot.symbol}:
@@ -600,133 +601,67 @@ Market data for ${snapshot.symbol}:
 - Volume 24h: ${(snapshot.volume_24h / 1e6)?.toFixed(1)}M
 - RSI-14: ${snapshot.rsi_14}
 - EMA9: ${snapshot.ema_9?.toFixed(2)}, EMA21: ${snapshot.ema_21?.toFixed(2)}
-- MACD: ${snapshot.macd?.toFixed?.(4) || snapshot.macd || \'N/A\'}, Signal: ${snapshot.macd_signal?.toFixed?.(4) || snapshot.macd_signal || \'N/A\'}
-- Funding Rate: ${snapshot.funding_rate?.toFixed?.(6) || snapshot.funding_rate || \'N/A\'}
-- Orderbook Imbalance: ${snapshot.orderbook_imbalance?.toFixed?.(4) || snapshot.orderbook_imbalance || \'N/A\'}
-- Open Interest: ${snapshot.open_interest ? (snapshot.open_interest / 1e6)?.toFixed(1) + \'M\' : \'N/A\'}
+- MACD: ${snapshot.macd?.toFixed?.(4) || snapshot.macd || 'N/A'}, Signal: ${snapshot.macd_signal?.toFixed?.(4) || snapshot.macd_signal || 'N/A'}
+- Funding Rate: ${snapshot.funding_rate?.toFixed?.(6) || snapshot.funding_rate || 'N/A'}
+- Orderbook Imbalance: ${snapshot.orderbook_imbalance?.toFixed?.(4) || snapshot.orderbook_imbalance || 'N/A'}
+- Open Interest: ${snapshot.open_interest ? (snapshot.open_interest / 1e6)?.toFixed(1) + 'M' : 'N/A'}
 
 Make a trading decision for the next 15 minutes.
 Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
-{\"action\":\"BUY\"|\"SELL\"|\"HOLD\",\"size\":0.1-1.0,\"leverage\":1-20,\"confidence\":0.0-1.0,\"take_profit\":0.1-3.0,\"stop_loss\":0.1-2.0,\"reasoning\":\"brief explanation\"}`;
-
-  const cleanJsonResponse = (raw) => {
-    if (!raw) throw new Error(\'Empty Ollama response\');
-    let cleaned = String(raw).trim();
-    // Strip Qwen3/DeepSeek thinking tags
-    cleaned = cleaned.replace(/<think>[\\s\\S]*?<\\/think>/gi, \'\').trim();
-    // Strip leading prose before first JSON brace
-    const firstBrace = cleaned.indexOf(\'{\');
-    if (firstBrace > 0) cleaned = cleaned.substring(firstBrace);\n    cleaned = cleaned.replace(/^```json\\s*/i, \'\').replace(/^```\\s*/i, \'\').replace(/\\s*```$/i, \'\').trim();
-    const jsonMatch = cleaned.match(/\\{[\\s\\S]*\\}/);\
-    if (!jsonMatch) throw new Error(\'No JSON in Ollama response\');
-    cleaned = jsonMatch[0].replace(/,\\s*([}\\]])/g, \'$1\');
-
-    // Fix unquoted keys (e.g. {action: \"BUY\"} -> {\"action\": \"BUY\"})
-    cleaned = cleaned.replace(/([{,])\\s*([a-zA-Z_]\\w*)\\s*:/g, \'$1\"$2\":\');
-    // Fix single-quoted values
-    cleaned = cleaned.replace(/:\\s*\'([^\']*)\'/g, \':\"$1\"\');
-    // Fix unquoted BUY/SELL/HOLD
-    cleaned = cleaned.replace(/:\\s*(BUY|SELL|HOLD)(\\s*[,}])/g, \':\"$1\"$2\');
-
-    let normalized = \'\';
-    let inString = false;\
-    let escaped = false;
-
-    for (const ch of cleaned) {\
-      if (inString) {
-        if (escaped) {
-          normalized += ch;
-          escaped = false;
-          continue;
-        }
-
-        if (ch === \'\\\\\') {
-          normalized += ch;
-          escaped = true;
-          continue;
-        }
-
-        if (ch === \'\"\') {
-          normalized += ch;
-          inString = false;
-          continue;
-        }
-
-        if (ch === \'\\n\') {
-          normalized += \'\\\\n\';
-          continue;
-        }
-
-        if (ch === \'\\r\') {
-          normalized += \'\\\\r\';
-          continue;
-        }
-
-        if (ch === \'\\t\') {
-          normalized += \'\\\\t\';
-          continue;
-        }
-
-        if ((ch >= \'\\x00\' && ch <= \'\\x08\') || ch === \'\\x0B\' || ch === \'\\x0C\' || (ch >= \'\\x0E\' && ch <= \'\\x1F\') || ch === \'\\x7F\') {
-          continue;
-        }
-
-        normalized += ch;
-      } else {
-        normalized += ch;
-        if (ch === \'\"\') inString = true;\
-      }
-    }
-
-    return normalized;
-  };
+{"action":"BUY"|"SELL"|"HOLD","size":0.1-1.0,"leverage":1-20,"confidence":0.0-1.0,"take_profit":0.1-3.0,"stop_loss":0.1-2.0,"reasoning":"brief explanation"}`;
 
   const parseDecision = (raw) => {
-    const d = JSON.parse(cleanJsonResponse(raw));
+    if (!raw) throw new Error('Empty Ollama response');
+    let cleaned = String(raw).trim();
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    const firstBrace = cleaned.indexOf('{');
+    if (firstBrace > 0) cleaned = cleaned.substring(firstBrace);
+    cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in Ollama response');
+    cleaned = jsonMatch[0].replace(/,\s*([}\]])/g, '$1');
+    cleaned = cleaned.replace(/([{,])\s*([a-zA-Z_]\w*)\s*:/g, '$1"$2":');
+    cleaned = cleaned.replace(/:\s*'([^']*)'/g, ':"$1"');
+    cleaned = cleaned.replace(/:\s*(BUY|SELL|HOLD)(\s*[,}])/g, ':"$1"$2');
+    const d = JSON.parse(cleaned);
     return {
-      action: d.action || \'HOLD\',
+      action: d.action || 'HOLD',
       size: Math.min(1, Math.max(0.1, parseFloat(d.size) || 0.3)),
       leverage: Math.min(20, Math.max(1, parseInt(d.leverage) || 5)),
       confidence: Math.min(1, Math.max(0, parseFloat(d.confidence) || 0.5)),
-      take_profit: Math.min(5, Math.max(0.1, parseFloat(d.take_profit) || 1.0)),
-      stop_loss: Math.min(5, Math.max(0.1, parseFloat(d.stop_loss) || 0.5)),
-      reasoning: d.reasoning || \'\',
+      take_profit: Math.min(5, Math.max(0.1, parseFloat(d.take_profit) || 0.5)),
+      stop_loss: Math.min(5, Math.max(0.1, parseFloat(d.stop_loss) || 0.3)),
+      reasoning: String(d.reasoning || '').substring(0, 200),
     };
   };
 
-  const requestDecision = async () => {\
+  try {
     const res = await fetch(OLLAMA_API_URL, {
-      method: \'POST\',
-      headers: {
-        \'Content-Type\': \'application/json\',
-      },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        messages: [{ role: \'user\', content: prompt }],
+        model: ollamaModel,
+        messages: [{ role: 'user', content: prompt }],
         stream: false,
-        options: {\"temperature\": 0.3, \"num_predict\": 512}
+        options: { temperature: 0.7, num_predict: 300 },
       }),
+      signal: AbortSignal.timeout(30000),
     });
-
-    if (!res.ok) throw new Error(`Ollama API ${res.status}`);
+    if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
     const data = await res.json();
-    return parseDecision(data.message?.content || \'\');
-  };
-
-  try {\
-    return await requestDecision();
-  } catch (e) {\
-    console.warn(`Ollama decision failed:`, e.message);
+    return parseDecision(data.message?.content || '');
+  } catch (e) {
+    console.warn('Ollama decision failed:', e.message);
   }
 
   return {
-    action: \'HOLD\',
+    action: 'HOLD',
     size: 0,
     leverage: 1,
     confidence: 0,
     take_profit: 0,
     stop_loss: 0,
-    reasoning: \'Ollama API error — safe HOLD fallback\'
+    reasoning: 'Ollama API error — safe HOLD fallback',
   };
 }
 
@@ -856,35 +791,46 @@ async function runBattleCycle(db) {
     SELECT ab.id, ab.name, ab.strategy FROM api_bots ab
     JOIN trading_elo te ON te.bot_id = ab.id
     WHERE ab.hp > 0
-    ORDER BY RANDOM() LIMIT 6
+    ORDER BY RANDOM() LIMIT 30
   `).all();
-  
+
   if (activeBots.length < 2) {
     console.warn('Not enough bots, skipping new battles');
     return;
   }
-  
+
   let newBattles = 0;
-  
+
   for (const symbol of SYMBOLS) {
     const snap = snapshots.get(symbol);
     if (!snap) continue;
-    
-    // Pick 2 random bots
+
+    const usedPairs = new Set();
+    for (let pairIdx = 0; pairIdx < BATTLES_PER_SYMBOL; pairIdx++) {
+    // Pick unique bot pair for this cycle
     const shuffled = [...activeBots].sort(() => Math.random() - 0.5);
-    const bot1 = shuffled[0];
-    const bot2 = shuffled[1];
+    let bot1 = null, bot2 = null;
+    for (let i = 0; i < shuffled.length - 1 && !bot2; i++) {
+      for (let j = i + 1; j < shuffled.length && !bot2; j++) {
+        const pairKey = [shuffled[i].id, shuffled[j].id].sort().join('-');
+        if (!usedPairs.has(pairKey)) {
+          bot1 = shuffled[i];
+          bot2 = shuffled[j];
+          usedPairs.add(pairKey);
+        }
+      }
+    }
     if (!bot1 || !bot2 || bot1.id === bot2.id) continue;
-    
+
     console.log(`⚔️  ${symbol}: ${bot1.name} vs ${bot2.name} | model assignment in progress...`);
-    
+
     const isChainGPT1 = bot1.name === CHAINGPT_BOT_NAME;
     const isChainGPT2 = bot2.name === CHAINGPT_BOT_NAME;
     const isOllama1 = bot1.name === OLLAMA_BOT_NAME;
     const isOllama2 = bot2.name === OLLAMA_BOT_NAME;
     const model1 = isChainGPT1 ? 'chaingpt/general_assistant' : (isOllama1 ? 'local/qwen3-30b' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)]);
     const model2 = isChainGPT2 ? 'chaingpt/general_assistant' : (isOllama2 ? 'local/qwen3-30b' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)]);
-    
+
     const [d1, d2] = await Promise.all([
       isOllama1 ? getOllamaDecision(snap, bot1.strategy || 'momentum') : (
         isChainGPT1 ? getChainGPTDecision(snap, bot1.strategy || 'momentum') : getTradingDecision(model1, snap, bot1.strategy || 'momentum')
@@ -919,8 +865,9 @@ async function runBattleCycle(db) {
     
     newBattles++;
     console.log(`   ✅ Battle ${battleId} created`);
+    } // end pairIdx loop
   }
-  
+
   console.log(`🏆 Cycle done: ${resolved} resolved, ${newBattles} new battles`);
 }
 
@@ -952,7 +899,7 @@ async function main() {
     console.error('First cycle error:', e);
   }
   
-  // Then every 15 minutes
+  // Then every BATTLE_INTERVAL_MS
   setInterval(async () => {
     try {
       await runBattleCycle(db);
