@@ -13,6 +13,7 @@ interface LiveBattleCardProps {
     token_symbol: string;
     duration_minutes?: number;
     current_x: number;
+    entry_price?: number;
     countdown: number;
     status: string;
     winner_id?: number | null;
@@ -24,15 +25,28 @@ interface LiveBattleCardProps {
   compact?: boolean;
 }
 
+async function fetchCurrentX(token: string, entryPrice: number): Promise<number | null> {
+  try {
+    const cleanToken = token.replace(/^\$/, '').replace(/USDT$/i, '');
+    const res = await fetch(`/api/token-price?token=${cleanToken}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.price || entryPrice <= 0) return null;
+    return data.price / entryPrice;
+  } catch {
+    return null;
+  }
+}
+
 export default function LiveBattleCard({ battle, myWallet, bot1Wallet, bot2Wallet, compact = false }: LiveBattleCardProps) {
   const [countdown, setCountdown] = useState(battle.countdown);
-  const [simulatedX, setSimulatedX] = useState(battle.current_x);
-  const [prevSimulatedX, setPrevSimulatedX] = useState(battle.current_x);
+  const [currentX, setCurrentX] = useState(battle.current_x);
   const [expanded, setExpanded] = useState(false);
   const [priceFlash, setPriceFlash] = useState<'up' | 'down' | null>(null);
   const [shaking, setShaking] = useState(false);
   const [prevBot1Winning, setPrevBot1Winning] = useState<boolean | null>(null);
   const lastTickRef = useRef<number>(-1);
+  const prevXRef = useRef<number>(battle.current_x);
   const isMine = myWallet && (bot1Wallet === myWallet || bot2Wallet === myWallet);
 
   // Init sound manager
@@ -61,33 +75,43 @@ export default function LiveBattleCard({ battle, myWallet, bot1Wallet, bot2Walle
     }
   }, [countdown]);
 
-  // Simulate price movement
+  // Real price polling — fetch every 10s from /api/token-price
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSimulatedX((prev) => {
-        setPrevSimulatedX(prev);
-        const change = (Math.random() - 0.48) * 0.05;
-        const next = Math.max(0.1, parseFloat((prev + change).toFixed(4)));
+    if (!battle.entry_price || battle.entry_price <= 0) return;
 
-        // Price flash effect — only on large moves to avoid constant flickering
-        const diff = next - prev;
-        if (Math.abs(diff) > 0.035) {
+    const poll = async () => {
+      const fetched = await fetchCurrentX(battle.token_symbol, battle.entry_price!);
+      if (fetched === null) return;
+
+      setCurrentX((prev) => {
+        const diff = fetched - prevXRef.current;
+        prevXRef.current = fetched;
+
+        if (Math.abs(diff) > 0.02) {
           setPriceFlash(diff > 0 ? 'up' : 'down');
           setTimeout(() => setPriceFlash(null), 300);
         }
-
-        // Screen shake only on very big moves (> 0.045)
-        if (Math.abs(diff) > 0.045) {
+        if (Math.abs(diff) > 0.04) {
           setShaking(true);
           soundManager.criticalHit();
           setTimeout(() => setShaking(false), 300);
         }
 
-        return next;
+        return fetched;
       });
-    }, 800);
+    };
+
+    poll();
+    const interval = setInterval(poll, 10_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [battle.token_symbol, battle.entry_price]);
+
+  // Sync current_x from props when entry_price is not available (fallback)
+  useEffect(() => {
+    if (!battle.entry_price || battle.entry_price <= 0) {
+      setCurrentX(battle.current_x);
+    }
+  }, [battle.current_x, battle.entry_price]);
 
   const totalDurationSec = (battle.duration_minutes || 1) * 60;
   const progress = Math.max(0, Math.min(100, ((totalDurationSec - countdown) / totalDurationSec) * 100));
@@ -103,8 +127,8 @@ export default function LiveBattleCard({ battle, myWallet, bot1Wallet, bot2Walle
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const bot1Diff = Math.abs(simulatedX - battle.bot1.prediction);
-  const bot2Diff = Math.abs(simulatedX - battle.bot2.prediction);
+  const bot1Diff = Math.abs(currentX - battle.bot1.prediction);
+  const bot2Diff = Math.abs(currentX - battle.bot2.prediction);
   const bot1Winning = bot1Diff < bot2Diff;
 
   // Lead change detection
@@ -226,9 +250,9 @@ export default function LiveBattleCard({ battle, myWallet, bot1Wallet, bot2Walle
 
           {/* Center: price */}
           <span className={`text-sm font-bold font-mono flex-shrink-0 ${
-            simulatedX >= 1.5 ? 'text-green-400' : simulatedX <= 0.7 ? 'text-red-400' : 'text-cyan-400'
+            currentX >= 1.5 ? 'text-green-400' : currentX <= 0.7 ? 'text-red-400' : 'text-cyan-400'
           } ${priceFlashClass}`}>
-            {simulatedX.toFixed(2)}x
+            {currentX.toFixed(2)}x
           </span>
 
           {/* Bots mini */}
@@ -319,10 +343,10 @@ export default function LiveBattleCard({ battle, myWallet, bot1Wallet, bot2Walle
           <div className="text-xs text-gray-500 mb-1">Current Price</div>
           <div
             className={`text-3xl font-black font-mono transition-colors duration-300 ${
-              simulatedX >= 1.5 ? 'text-green-400' : simulatedX <= 0.7 ? 'text-red-400' : 'text-cyan-400'
+              currentX >= 1.5 ? 'text-green-400' : currentX <= 0.7 ? 'text-red-400' : 'text-cyan-400'
             } ${priceFlashClass}`}
           >
-            {simulatedX.toFixed(2)}x
+            {currentX.toFixed(2)}x
             {/* Price direction indicator */}
             <AnimatePresence>
               {priceFlash && (

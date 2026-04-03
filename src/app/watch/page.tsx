@@ -224,6 +224,55 @@ const timeAgo = (dateString: string) => {
   return Math.max(0, Math.floor(seconds)) + ' seconds ago';
 };
 
+// Live price cell — polls /api/token-price every 10s and shows current price + % vs entry
+function LivePriceCell({ symbol, entryPrice }: { symbol: string; entryPrice: number }) {
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+
+  useEffect(() => {
+    const cleanSymbol = symbol.replace(/USDT$/i, '');
+
+    const fetchPrice = async () => {
+      try {
+        const res = await fetch(`/api/token-price?token=${cleanSymbol}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.price) setCurrentPrice(data.price);
+      } catch {
+        // Silently ignore fetch errors
+      }
+    };
+
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 10_000);
+    return () => clearInterval(interval);
+  }, [symbol]);
+
+  if (currentPrice === null) {
+    return (
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+        <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Live Price</div>
+        <div className="text-base font-semibold text-gray-500 animate-pulse">Loading…</div>
+      </div>
+    );
+  }
+
+  const pctChange = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
+  const isUp = pctChange >= 0;
+  const priceColor = isUp ? 'text-green-400' : 'text-red-400';
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+      <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Live Price</div>
+      <div className={`text-base font-semibold ${priceColor}`}>
+        ${currentPrice.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+      </div>
+      <div className={`text-xs mt-0.5 ${priceColor}`}>
+        {isUp ? '▲' : '▼'} {Math.abs(pctChange).toFixed(2)}% vs entry
+      </div>
+    </div>
+  );
+}
+
 export default function WatchPage() {
   const [tradingLeagueData, setTradingLeagueData] = useState<TradingLeagueData | null>(null);
   const [currentFightState, setCurrentFightState] = useState<FightState | null>(null);
@@ -378,12 +427,7 @@ export default function WatchPage() {
                         </div>
                       </div>
 
-                      <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
-                        <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Status</div>
-                        <div className={`text-base font-semibold ${countdownDone ? 'text-yellow-400' : 'text-green-400'}`}>
-                          {countdownDone ? 'Resolving' : 'Live'}
-                        </div>
-                      </div>
+                      <LivePriceCell symbol={battle.symbol} entryPrice={battle.entry_price} />
                     </div>
                   </div>
                 );
