@@ -788,10 +788,10 @@ async function runBattleCycle(db) {
   
   // 3. Start new battles
   const activeBots = db.prepare(`
-    SELECT ab.id, ab.name, ab.strategy FROM api_bots ab
+    SELECT ab.id, ab.name, ab.strategy, te.elo FROM api_bots ab
     JOIN trading_elo te ON te.bot_id = ab.id
     WHERE ab.hp > 0
-    ORDER BY RANDOM() LIMIT 30
+    ORDER BY te.elo DESC LIMIT 30
   `).all();
 
   if (activeBots.length < 2) {
@@ -807,16 +807,36 @@ async function runBattleCycle(db) {
 
     const usedPairs = new Set();
     for (let pairIdx = 0; pairIdx < BATTLES_PER_SYMBOL; pairIdx++) {
-    // Pick unique bot pair for this cycle
+    // ELO-based matchmaking: pair bots within ±100 ELO range
+    // Shuffle to avoid always picking the same top pair, then find ELO-compatible match
+    const ELO_RANGE = 100;
     const shuffled = [...activeBots].sort(() => Math.random() - 0.5);
     let bot1 = null, bot2 = null;
     for (let i = 0; i < shuffled.length - 1 && !bot2; i++) {
-      for (let j = i + 1; j < shuffled.length && !bot2; j++) {
-        const pairKey = [shuffled[i].id, shuffled[j].id].sort().join('-');
+      const candidate = shuffled[i];
+      // Find the closest ELO opponent within range that hasn't been used
+      const opponents = activeBots
+        .filter(b => b.id !== candidate.id && Math.abs(b.elo - candidate.elo) <= ELO_RANGE)
+        .sort((a, b) => Math.abs(a.elo - candidate.elo) - Math.abs(b.elo - candidate.elo));
+      for (const opp of opponents) {
+        const pairKey = [candidate.id, opp.id].sort().join('-');
         if (!usedPairs.has(pairKey)) {
-          bot1 = shuffled[i];
-          bot2 = shuffled[j];
+          bot1 = candidate;
+          bot2 = opp;
           usedPairs.add(pairKey);
+          break;
+        }
+      }
+      // Fallback: if no ELO match found, allow any unpaired opponent
+      if (!bot2) {
+        for (let j = 0; j < shuffled.length && !bot2; j++) {
+          if (shuffled[j].id === candidate.id) continue;
+          const pairKey = [candidate.id, shuffled[j].id].sort().join('-');
+          if (!usedPairs.has(pairKey)) {
+            bot1 = candidate;
+            bot2 = shuffled[j];
+            usedPairs.add(pairKey);
+          }
         }
       }
     }
