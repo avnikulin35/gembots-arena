@@ -185,12 +185,12 @@ const STRATEGIES = {
     return null;
   },
   scalper: (priceData) => {
-    // Scalpers trade on small moves
+    // Scalpers trade on confirmed small moves (no random noise)
     const change = priceData.change_1h || (priceData.change_24h || 0) / 6;
-    if (change > 0.3) return { side: 'buy', confidence: Math.min(0.85, 0.6 + Math.abs(change) / 10) };
-    if (change < -0.3) return { side: 'sell', confidence: Math.min(0.85, 0.6 + Math.abs(change) / 10) };
-    // Random small trades if no signal (scalpers are active)
-    if (Math.random() > 0.7) return { side: Math.random() > 0.5 ? 'buy' : 'sell', confidence: 0.62 };
+    const change5m = priceData.change_5m || change / 12;
+    // Require same-direction confirmation from short-term momentum
+    if (change > 0.5 && change5m > 0) return { side: 'buy', confidence: Math.min(0.85, 0.62 + Math.abs(change) / 10) };
+    if (change < -0.5 && change5m < 0) return { side: 'sell', confidence: Math.min(0.85, 0.62 + Math.abs(change) / 10) };
     return null;
   },
   whale_watcher: (priceData) => {
@@ -200,7 +200,7 @@ const STRATEGIES = {
     if (change24h > 3) return { side: 'sell', confidence: Math.min(0.9, 0.65 + change24h / 15) };
     // Moderate activity
     const change1h = priceData.change_1h || change24h / 4;
-    if (Math.abs(change1h) > 0.5) return { side: change1h > 0 ? 'buy' : 'sell', confidence: 0.62 };
+    if (Math.abs(change1h) > 1.5) return { side: change1h > 0 ? 'buy' : 'sell', confidence: 0.65 };
     return null;
   },
   smart_ai: (priceData) => {
@@ -227,7 +227,7 @@ function getTradingSignal(bot, priceData, pair) {
 
   // Apply NFA modifiers if available (from strategy_cache)
   const config = bot.trading_config || {};
-  const threshold = config.confidence_threshold || 0.6;
+  const threshold = config.confidence_threshold || 0.65;
 
   if (signal.confidence < threshold) return null;
 
@@ -432,8 +432,8 @@ async function checkOpenPositions() {
       // Use defaults
     }
 
-    const takeProfitPct = botConfig.take_profit_pct || 5;
-    const stopLossPct = botConfig.stop_loss_pct || 3;
+    const takeProfitPct = botConfig.take_profit_pct || 6;
+    const stopLossPct = botConfig.stop_loss_pct || 2.5;
 
     let closeReason = null;
 
@@ -744,14 +744,17 @@ async function tradingCycle() {
     const availablePairs = allowedPairs.filter(p => prices[p]);
     if (availablePairs.length === 0) continue;
 
-    // Check each allowed pair for signals
+    // Check each allowed pair for signals — at most 1 new trade per bot per cycle
+    let tradedThisCycle = false;
     for (const pair of availablePairs) {
+      if (tradedThisCycle) break;
       const priceData = await getPrice(pair);
       if (!priceData) continue;
 
       const signal = getTradingSignal(bot, priceData, pair);
       if (signal) {
-        await openTrade(bot, signal, priceData.price);
+        const trade = await openTrade(bot, signal, priceData.price);
+        if (trade) tradedThisCycle = true;
       }
     }
   }
