@@ -45,7 +45,6 @@ const MODEL_POOL = [
   'deepseek/deepseek-r1',
   'mistralai/mistral-small-24b-instruct-2501',
   'openai/gpt-4.1-nano',
-  'local/qwen3-30b',
 ];
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -56,7 +55,7 @@ const CHAINGPT_API_URL = 'https://api.chaingpt.org/chat/stream';
 const CHAINGPT_BOT_NAME = '🧠 ChainGPT';
 
 const OLLAMA_API_URL = 'http://100.70.191.97:11434/api/chat';
-const OLLAMA_MODELS = ['qwen3:30b', 'qwen3.5:35b'];
+const OLLAMA_MODELS = ['qwen3-30b-nothink'];
 const OLLAMA_BOT_NAME = '🖥️ Qwen3-Local';
 
 const STRATEGY_DESCRIPTIONS = {
@@ -143,6 +142,82 @@ function calculateMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 
     macd,
     signal,
     histogram: macd - signal,
+  };
+}
+
+
+
+// ─── Support/Resistance & Fibonacci ────────────────────────────────────────
+
+function calculateSupportResistance(klineList) {
+  if (!Array.isArray(klineList) || klineList.length < 3) return null;
+
+  const highs = klineList.map(k => parseFloat(k[2])).filter(Number.isFinite);
+  const lows = klineList.map(k => parseFloat(k[3])).filter(Number.isFinite);
+  const closes = klineList.map(k => parseFloat(k[4])).filter(Number.isFinite);
+  const volumes = klineList.map(k => parseFloat(k[5])).filter(Number.isFinite);
+
+  if (highs.length < 3) return null;
+
+  const high24h = Math.max(...highs);
+  const low24h = Math.min(...lows);
+  const lastClose = closes[closes.length - 1];
+
+  // Pivot Points (Floor method)
+  const pivot = (high24h + low24h + lastClose) / 3;
+  const r1 = 2 * pivot - low24h;
+  const s1 = 2 * pivot - high24h;
+  const r2 = pivot + (high24h - low24h);
+  const s2 = pivot - (high24h - low24h);
+  const r3 = high24h + 2 * (pivot - low24h);
+  const s3 = low24h - 2 * (high24h - pivot);
+
+  // Fibonacci retracement levels (from recent swing)
+  const range = high24h - low24h;
+  const fib_236 = high24h - range * 0.236;
+  const fib_382 = high24h - range * 0.382;
+  const fib_500 = high24h - range * 0.500;
+  const fib_618 = high24h - range * 0.618;
+  const fib_786 = high24h - range * 0.786;
+
+  // Volume Profile — find price level with highest volume (POC)
+  let poc = lastClose;
+  if (volumes.length > 0 && closes.length === volumes.length) {
+    const priceSteps = 10;
+    const stepSize = range / priceSteps;
+    if (stepSize > 0) {
+      const volumeByLevel = new Array(priceSteps).fill(0);
+      for (let i = 0; i < closes.length; i++) {
+        const level = Math.min(priceSteps - 1, Math.floor((closes[i] - low24h) / stepSize));
+        if (level >= 0 && level < priceSteps) {
+          volumeByLevel[level] += volumes[i] || 0;
+        }
+      }
+      const maxIdx = volumeByLevel.indexOf(Math.max(...volumeByLevel));
+      poc = low24h + (maxIdx + 0.5) * stepSize;
+    }
+  }
+
+  // Trend detection
+  const recentCloses = closes.slice(-5);
+  let trend = 'sideways';
+  if (recentCloses.length >= 3) {
+    const first = recentCloses[0];
+    const last = recentCloses[recentCloses.length - 1];
+    const changePct = ((last - first) / first) * 100;
+    if (changePct > 0.5) trend = 'bullish';
+    else if (changePct < -0.5) trend = 'bearish';
+  }
+
+  // Price position relative to levels
+  const nearSupport = lastClose <= s1 * 1.005;
+  const nearResistance = lastClose >= r1 * 0.995;
+
+  return {
+    pivot, r1, r2, r3, s1, s2, s3,
+    fib_236, fib_382, fib_500, fib_618, fib_786,
+    high_24h: high24h, low_24h: low24h,
+    poc, trend, nearSupport, nearResistance,
   };
 }
 
@@ -255,6 +330,10 @@ async function fetchAndSaveSnapshots() {
         console.warn(`Orderbook fetch failed for ${symbol}:`, orderbookError.message);
       }
 
+      // Calculate Support/Resistance & Fibonacci
+      const klineList = Array.isArray(klines?.result?.list) ? [...klines.result.list].reverse() : [];
+      const technicals = calculateSupportResistance(klineList) || {};
+
       const snap = {
         timestamp: new Date().toISOString(),
         symbol,
@@ -270,6 +349,19 @@ async function fetchAndSaveSnapshots() {
         macd_signal: indicators.macd_signal,
         funding_rate: indicators.funding_rate,
         open_interest: indicators.open_interest,
+        // Technical Analysis
+        pivot: technicals.pivot,
+        resistance_1: technicals.r1,
+        resistance_2: technicals.r2,
+        support_1: technicals.s1,
+        support_2: technicals.s2,
+        fib_382: technicals.fib_382,
+        fib_500: technicals.fib_500,
+        fib_618: technicals.fib_618,
+        volume_poc: technicals.poc,
+        trend: technicals.trend,
+        high_24h: technicals.high_24h,
+        low_24h: technicals.low_24h,
       };
 
       snapshots.set(symbol, snap);
@@ -299,6 +391,12 @@ Market data for ${snapshot.symbol}:
 - Funding Rate: ${snapshot.funding_rate?.toFixed?.(6) || snapshot.funding_rate || 'N/A'}
 - Orderbook Imbalance: ${snapshot.orderbook_imbalance?.toFixed?.(4) || snapshot.orderbook_imbalance || 'N/A'}
 - Open Interest: ${snapshot.open_interest ? (snapshot.open_interest / 1e6)?.toFixed(1) + 'M' : 'N/A'}
+- Trend: ${snapshot.trend || 'N/A'}
+- 24h Range: ${snapshot.low_24h?.toFixed(2) || 'N/A'} — ${snapshot.high_24h?.toFixed(2) || 'N/A'}
+- Pivot: ${snapshot.pivot?.toFixed(2) || 'N/A'} | R1: ${snapshot.resistance_1?.toFixed(2) || 'N/A'} | R2: ${snapshot.resistance_2?.toFixed(2) || 'N/A'}
+- S1: ${snapshot.support_1?.toFixed(2) || 'N/A'} | S2: ${snapshot.support_2?.toFixed(2) || 'N/A'}
+- Fibonacci: 38.2%=${snapshot.fib_382?.toFixed(2) || 'N/A'} | 50%=${snapshot.fib_500?.toFixed(2) || 'N/A'} | 61.8%=${snapshot.fib_618?.toFixed(2) || 'N/A'}
+- Volume POC: ${snapshot.volume_poc?.toFixed(2) || 'N/A'}
 
 Make a trading decision for the next 15 minutes.
 Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
@@ -438,9 +536,70 @@ Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
   };
 }
 
+
+// ─── ChainGPT On-Chain Data Enrichment ──────────────────────────────────────
+
+async function fetchChainGPTOnChainData(symbol) {
+  if (!CHAINGPT_API_KEY) return '';
+
+  const symbolMap = {
+    'BTCUSDT': 'Bitcoin (BTC)',
+    'ETHUSDT': 'Ethereum (ETH)',
+    'SOLUSDT': 'Solana (SOL)',
+  };
+  const tokenName = symbolMap[symbol] || symbol.replace('USDT', '');
+
+  const queries = [
+    `What are the latest whale movements and smart money flows for ${tokenName} in the last 2 hours? Include: large transactions (>$1M), exchange inflows/outflows, and notable wallet activity. Be concise, data only.`,
+    `What is the current market sentiment for ${tokenName}? Include: social sentiment score, fear/greed index, and any notable news or events affecting price. Be concise, data only.`,
+  ];
+
+  const results = [];
+  for (const question of queries) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(CHAINGPT_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${CHAINGPT_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'general_assistant',
+          question,
+          chatHistory: 'off',
+          temperature: 0.3,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.length > 10) results.push(text.trim());
+      }
+    } catch (e) {
+      console.warn(`ChainGPT on-chain query failed for ${symbol}:`, e.message);
+    }
+  }
+
+  if (results.length === 0) return '';
+  return `\n\n--- ON-CHAIN INTELLIGENCE (ChainGPT Exclusive) ---\n${results.join('\n\n')}\n--- END ON-CHAIN DATA ---`;
+}
+
 // ─── ChainGPT Decision ─────────────────────────────────────────────────────
 
 async function getChainGPTDecision(snapshot, strategy) {
+  // Fetch on-chain intelligence (ChainGPT exclusive advantage)
+  let onChainData = "";
+  try {
+    onChainData = await fetchChainGPTOnChainData(snapshot.symbol);
+    if (onChainData) console.log(`   \u{1F40B} ChainGPT on-chain data fetched for ${snapshot.symbol} (${onChainData.length} chars)`);
+  } catch (e) {
+    console.warn(`ChainGPT on-chain enrichment failed: ${e.message}`);
+  }
+
   const stratDesc = STRATEGY_DESCRIPTIONS[strategy] || STRATEGY_DESCRIPTIONS.momentum;
   const question = `${stratDesc}
 
@@ -455,10 +614,19 @@ Market data for ${snapshot.symbol}:
 - Funding Rate: ${snapshot.funding_rate?.toFixed?.(6) || snapshot.funding_rate || 'N/A'}
 - Orderbook Imbalance: ${snapshot.orderbook_imbalance?.toFixed?.(4) || snapshot.orderbook_imbalance || 'N/A'}
 - Open Interest: ${snapshot.open_interest ? (snapshot.open_interest / 1e6)?.toFixed(1) + 'M' : 'N/A'}
+- Trend: ${snapshot.trend || 'N/A'}
+- 24h Range: ${snapshot.low_24h?.toFixed(2) || 'N/A'} — ${snapshot.high_24h?.toFixed(2) || 'N/A'}
+- Pivot: ${snapshot.pivot?.toFixed(2) || 'N/A'} | R1: ${snapshot.resistance_1?.toFixed(2) || 'N/A'} | R2: ${snapshot.resistance_2?.toFixed(2) || 'N/A'}
+- S1: ${snapshot.support_1?.toFixed(2) || 'N/A'} | S2: ${snapshot.support_2?.toFixed(2) || 'N/A'}
+- Fibonacci: 38.2%=${snapshot.fib_382?.toFixed(2) || 'N/A'} | 50%=${snapshot.fib_500?.toFixed(2) || 'N/A'} | 61.8%=${snapshot.fib_618?.toFixed(2) || 'N/A'}
+- Volume POC: ${snapshot.volume_poc?.toFixed(2) || 'N/A'}
+${onChainData}
+
+You have EXCLUSIVE access to on-chain intelligence that other bots do NOT have. Use whale movements, smart money flows, and sentiment data to gain an edge in your analysis.
 
 Make a trading decision for the next 15 minutes.
 Respond ONLY with valid JSON:
-{"action":"BUY"|"SELL"|"HOLD","size":0.1-1.0,"leverage":1-20,"confidence":0.0-1.0,"take_profit":0.1-3.0,"stop_loss":0.1-2.0,"reasoning":"brief explanation"}`;
+{"action":"BUY"|"SELL"|"HOLD","size":0.1-1.0,"leverage":1-20,"confidence":0.0-1.0,"take_profit":0.1-3.0,"stop_loss":0.1-2.0,"reasoning":"brief explanation including on-chain signals"}`;
 
   const cleanJsonResponse = (raw) => {
     if (!raw) throw new Error('Empty ChainGPT response');
@@ -605,6 +773,12 @@ Market data for ${snapshot.symbol}:
 - Funding Rate: ${snapshot.funding_rate?.toFixed?.(6) || snapshot.funding_rate || 'N/A'}
 - Orderbook Imbalance: ${snapshot.orderbook_imbalance?.toFixed?.(4) || snapshot.orderbook_imbalance || 'N/A'}
 - Open Interest: ${snapshot.open_interest ? (snapshot.open_interest / 1e6)?.toFixed(1) + 'M' : 'N/A'}
+- Trend: ${snapshot.trend || 'N/A'}
+- 24h Range: ${snapshot.low_24h?.toFixed(2) || 'N/A'} — ${snapshot.high_24h?.toFixed(2) || 'N/A'}
+- Pivot: ${snapshot.pivot?.toFixed(2) || 'N/A'} | R1: ${snapshot.resistance_1?.toFixed(2) || 'N/A'} | R2: ${snapshot.resistance_2?.toFixed(2) || 'N/A'}
+- S1: ${snapshot.support_1?.toFixed(2) || 'N/A'} | S2: ${snapshot.support_2?.toFixed(2) || 'N/A'}
+- Fibonacci: 38.2%=${snapshot.fib_382?.toFixed(2) || 'N/A'} | 50%=${snapshot.fib_500?.toFixed(2) || 'N/A'} | 61.8%=${snapshot.fib_618?.toFixed(2) || 'N/A'}
+- Volume POC: ${snapshot.volume_poc?.toFixed(2) || 'N/A'}
 
 Make a trading decision for the next 15 minutes.
 Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
@@ -848,8 +1022,8 @@ async function runBattleCycle(db) {
     const isChainGPT2 = bot2.name === CHAINGPT_BOT_NAME;
     const isOllama1 = bot1.name === OLLAMA_BOT_NAME;
     const isOllama2 = bot2.name === OLLAMA_BOT_NAME;
-    const model1 = isChainGPT1 ? 'chaingpt/general_assistant' : (isOllama1 ? 'local/qwen3-30b' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)]);
-    const model2 = isChainGPT2 ? 'chaingpt/general_assistant' : (isOllama2 ? 'local/qwen3-30b' : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)]);
+    const model1 = isChainGPT1 ? 'chaingpt/general_assistant' : (isOllama1 ? OLLAMA_BOT_NAME : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)]);
+    const model2 = isChainGPT2 ? 'chaingpt/general_assistant' : (isOllama2 ? OLLAMA_BOT_NAME : MODEL_POOL[Math.floor(Math.random() * MODEL_POOL.length)]);
 
     const [d1, d2] = await Promise.all([
       isOllama1 ? getOllamaDecision(snap, bot1.strategy || 'momentum') : (

@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getModelDisplayName } from '@/lib/model-display';
+import dynamic from 'next/dynamic';
+
+const BattleChart = dynamic(() => import('@/components/BattleChart'), { ssr: false });
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -134,9 +137,18 @@ export default function TradingDashboard() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
+    const initialLoad = setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    const interval = setInterval(() => {
+      void fetchData();
+    }, 10000);
+
+    return () => {
+      clearTimeout(initialLoad);
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   return (
@@ -201,8 +213,9 @@ export default function TradingDashboard() {
               recent={tradingData?.recentBattles ?? []}
             />
 
-            {/* Two-column: Portfolio + Model Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Trading League Boards */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <TradingEloLeaderboard leaderboard={tradingData?.leaderboard ?? []} />
               <PortfolioLeaderboard portfolios={portfolios} />
               <ModelPerformanceCards models={tradingData?.modelLeaderboard ?? []} />
             </div>
@@ -257,6 +270,7 @@ function StatsBar({ stats }: { stats: TradingLeagueData['stats'] | null }) {
 // ─── LIVE BATTLES ─────────────────────────────────────────────────────────────
 
 function LiveBattles({ active, recent }: { active: Battle[]; recent: Battle[] }) {
+  const [selectedBattle, setSelectedBattle] = useState<string | null>(null);
   const allBattles = [...active, ...recent];
 
   return (
@@ -282,6 +296,11 @@ function LiveBattles({ active, recent }: { active: Battle[]; recent: Battle[] })
         <span className="text-xs text-gray-600">Auto-refreshes every 10s</span>
       </div>
 
+      {/* Battle Chart Modal */}
+      {selectedBattle && (
+        <BattleChart battleId={selectedBattle} onClose={() => setSelectedBattle(null)} />
+      )}
+
       {allBattles.length === 0 ? (
         <div className="p-8 text-center text-gray-600">No battles found yet.</div>
       ) : (
@@ -296,7 +315,8 @@ function LiveBattles({ active, recent }: { active: Battle[]; recent: Battle[] })
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
                   transition={{ duration: 0.3, delay: i * 0.03 }}
-                  className={`px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-0 justify-between hover:bg-gray-800/20 transition-colors ${
+                  onClick={() => setSelectedBattle(b.id.toString())}
+                  className={`px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-0 justify-between hover:bg-gray-800/20 transition-colors cursor-pointer ${
                     isActive ? 'bg-cyan-500/[0.02]' : ''
                   }`}
                 >
@@ -355,6 +375,74 @@ function LiveBattles({ active, recent }: { active: Battle[]; recent: Battle[] })
               );
             })}
           </AnimatePresence>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── TRADING ELO LEADERBOARD ─────────────────────────────────────────────────
+
+function TradingEloLeaderboard({ leaderboard }: { leaderboard: TradingEloData[] }) {
+  const rankBadge = (i: number) =>
+    i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.25 }}
+      className="bg-gray-900/50 backdrop-blur-sm rounded-xl border border-gray-800/80 overflow-hidden"
+    >
+      <div className="px-5 py-4 border-b border-gray-800">
+        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <span>⚔️</span> Trading ELO
+        </h2>
+      </div>
+
+      {leaderboard.length === 0 ? (
+        <div className="p-8 text-center text-gray-600">No ELO data yet.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 text-[11px] text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left">#</th>
+                <th className="px-4 py-3 text-left">Bot</th>
+                <th className="px-4 py-3 text-right">ELO</th>
+                <th className="px-4 py-3 text-right">W/L/D</th>
+                <th className="px-4 py-3 text-right">Total P&L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leaderboard.slice(0, 15).map((bot, i) => {
+                const pnlColor = bot.total_pnl >= 0 ? 'text-emerald-400' : 'text-red-400';
+                return (
+                  <motion.tr
+                    key={bot.bot_id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.25 + i * 0.03 }}
+                    className="border-b border-gray-800/40 hover:bg-gray-800/20 transition-colors"
+                  >
+                    <td className="px-4 py-3 text-base">{rankBadge(i)}</td>
+                    <td className="px-4 py-3 font-bold text-white truncate max-w-[140px]">{bot.name}</td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-cyan-400">{bot.elo.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-mono text-gray-400">
+                      <span className="text-emerald-400">{bot.wins}</span>
+                      <span className="text-gray-600">/</span>
+                      <span className="text-red-400">{bot.losses}</span>
+                      <span className="text-gray-600">/</span>
+                      <span className="text-gray-500">{bot.draws}</span>
+                    </td>
+                    <td className={`px-4 py-3 text-right font-mono ${pnlColor}`}>
+                      {bot.total_pnl >= 0 ? '+' : ''}{bot.total_pnl.toFixed(2)}%
+                    </td>
+                  </motion.tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </motion.div>

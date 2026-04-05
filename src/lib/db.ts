@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 if (!fs.existsSync(DATA_DIR)) {
@@ -119,11 +120,15 @@ db.exec(`
     bot2_confidence REAL,
     bot2_tp REAL,
     bot2_sl REAL,
+    bot2_pnl REAL,
     bot2_reasoning TEXT,
     
     market_data TEXT,
     winner_id INTEGER,
     status TEXT DEFAULT 'pending',
+    bot1_model TEXT,
+    bot2_model TEXT,
+    commentary TEXT,
     
     FOREIGN KEY (bot1_id) REFERENCES api_bots(id),
     FOREIGN KEY (bot2_id) REFERENCES api_bots(id)
@@ -151,6 +156,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_token_prices_mint ON token_prices(token_mint);
   CREATE INDEX IF NOT EXISTS idx_trade_events_time ON trade_events(timestamp);
 `);
+
+function ensureColumn(tableName: string, columnName: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === columnName)) {
+    return;
+  }
+
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+}
+
+// Keep the trading schema aligned with the engine and API expectations.
+ensureColumn('trading_battles', 'bot2_pnl', 'REAL');
+ensureColumn('trading_battles', 'bot1_model', 'TEXT');
+ensureColumn('trading_battles', 'bot2_model', 'TEXT');
+ensureColumn('trading_battles', 'commentary', 'TEXT');
 
 // Stakes functions
 export function createStake(data: {
@@ -315,7 +335,6 @@ export function createApiBot(data: {
   walletAddress: string;
   webhookUrl?: string;
 }) {
-  const crypto = require('crypto');
   const apiKey = `bot_${crypto.randomBytes(20).toString('hex')}`;
   const webhookSecret = crypto.randomBytes(32).toString('hex');
   
@@ -375,7 +394,7 @@ export function linkBetToBot(betId: number, apiKey: string) {
   // Add bot_api_key column to stakes if it doesn't exist
   try {
     db.exec('ALTER TABLE stakes ADD COLUMN bot_api_key TEXT');
-  } catch (e) {
+  } catch {
     // Column already exists
   }
   
@@ -462,7 +481,7 @@ export function getRecentTradingBattles(limit: number = 10) {
 export function getTradingLeaderboard(limit: number = 10) {
   return db.prepare(`
     SELECT * FROM trading_elo ORDER BY elo DESC LIMIT ?
-  `).all();
+  `).all(limit);
 }
 
 export function getTradingBotStats(botId: number) {

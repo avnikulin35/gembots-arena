@@ -55,7 +55,7 @@ export async function GET() {
         ab.name
       FROM trading_elo t
       JOIN api_bots ab ON t.bot_id = ab.id
-      ORDER BY t.total_pnl DESC
+      ORDER BY t.elo DESC, t.total_pnl DESC, ab.name ASC
       LIMIT 20;
     `);
     const leaderboard: TradingElo[] = leaderboardQuery.all() as TradingElo[];
