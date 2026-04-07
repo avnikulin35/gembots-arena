@@ -213,6 +213,80 @@ const COMPETITOR_ROWS = [
   },
 ];
 
+const UNIT_ECONOMICS = [
+  {
+    tier: 'Bronze',
+    cost: '$60',
+    profile: 'Entry exposure with open arena access and lower expected league monetization.',
+    monthly: '$0–$40',
+  },
+  {
+    tier: 'Silver',
+    cost: '$180',
+    profile: 'Curated launch profile with early premium-league eligibility and faster trust formation.',
+    monthly: '$30–$120',
+  },
+  {
+    tier: 'Gold',
+    cost: '$450',
+    profile: 'Proven track record, premium-league ready, strongest mainstream risk/reward profile.',
+    monthly: '$80–$250',
+  },
+  {
+    tier: 'Diamond / Genesis',
+    cost: '$900+ / Genesis',
+    profile: 'Top-tier access, Champions surface, strongest fee and visibility upside.',
+    monthly: '$150–$500+',
+  },
+];
+
+const RISK_DISCLOSURES = [
+  {
+    title: 'Smart contract risk',
+    text: 'Even audited or verified contracts can contain undiscovered bugs, integration issues, or upgrade-related mistakes that affect asset value or user operations.',
+  },
+  {
+    title: 'Model degradation',
+    text: 'AI agents can lose edge as market structure changes, model providers update behavior, or once-effective prompts and strategies become crowded.',
+  },
+  {
+    title: 'Market conditions',
+    text: 'Crypto is volatile. Strong historical WR, ELO, or PnL does not guarantee future performance across new regimes, liquidity conditions, or token environments.',
+  },
+  {
+    title: 'Regulatory',
+    text: 'Rules around AI agents, digital assets, revenue share structures, and automated trading can change by jurisdiction and may affect access or product design.',
+  },
+];
+
+const FORGE_FLOW = [
+  'Describe a strategy in plain English — logic, risk style, indicators, or market preference.',
+  'AI Forge generates the initial agent profile, strategy prompt, and execution framing.',
+  'The strategy enters an incubator test environment to gather early performance signals.',
+  'If the profile proves compelling, it can be minted as an NFA with its own identity and track record.',
+];
+
+const FORGE_PRICING = [
+  { title: 'Forge Draft', price: '0.25 BNB', text: 'Generate a custom strategy draft, avatar direction, and incubation-ready agent profile.' },
+  { title: 'Forge Incubator', price: '0.6 BNB', text: 'Run the custom concept through incubation, gather test data, and prepare a stronger mint candidate.' },
+  { title: 'Forge Premium Mint', price: '1.2 BNB+', text: 'Custom high-conviction Forge NFA with deeper curation, stronger positioning, and premium launch treatment.' },
+];
+
+const FORGE_EXAMPLES = [
+  {
+    name: 'Momentum Sniper',
+    result: 'Trend-following setup that enters fast breakout conditions and compounds strong ranking through disciplined exits.',
+  },
+  {
+    name: 'Mean Reversion Vault',
+    result: 'Contrarian profile designed for overextension fades, optimized for calmer but repeatable battle performance.',
+  },
+  {
+    name: 'Volatility Scalper',
+    result: 'Short-horizon reaction strategy built for bursty symbols, tuned to prioritize speed and strict loss control.',
+  },
+];
+
 function SectionHeading({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
   return (
     <div className="max-w-3xl">
@@ -516,6 +590,128 @@ export default function AgentomicsPage() {
               <p className="mt-3 text-sm leading-7 text-gray-400">MyShell focuses on creator-facing AI apps. GemBots focuses on a narrower but stronger wedge: tradable AI agents with on-chain battle reputation as the core moat.</p>
             </div>
           </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-20">
+          <SectionHeading
+            eyebrow="Unit Economics"
+            title="How the model can work for owners"
+            text="Agentomics works when entry price, league access, and recurring earning surfaces make intuitive sense. The strongest mainstream profile is Gold: enough proof to matter, still accessible enough to scale ownership."
+          />
+
+          <div className="mt-12 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="rounded-3xl border border-amber-400/15 bg-gradient-to-br from-amber-400/10 to-yellow-300/10 p-8">
+              <div className="mb-3 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200">
+                Gold NFA example ROI
+              </div>
+              <h3 className="text-2xl font-black text-white">Illustrative league case</h3>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Acquisition cost</div>
+                  <div className="mt-2 text-3xl font-black text-white">$450</div>
+                  <div className="mt-1 text-sm text-gray-400">Gold pre-built NFA</div>
+                </div>
+                <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Monthly league outcome</div>
+                  <div className="mt-2 text-3xl font-black text-emerald-400">$140</div>
+                  <div className="mt-1 text-sm text-gray-400">mix of prizes + rentals + ecosystem rewards</div>
+                </div>
+              </div>
+              <div className="mt-6 rounded-2xl border border-white/8 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Illustrative payback window</div>
+                <div className="mt-2 text-4xl font-black text-amber-200">~3.2 months</div>
+                <p className="mt-2 text-sm leading-7 text-gray-400">
+                  This is not a promise of return — just an example showing why Gold is positioned as the core “serious owner” tier in the economy design.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              {UNIT_ECONOMICS.map((item) => (
+                <div key={item.tier} className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="text-xl font-bold text-white">{item.tier}</h3>
+                    <div className="text-lg font-black text-amber-200">{item.cost}</div>
+                  </div>
+                  <p className="mt-3 text-sm leading-7 text-gray-400">{item.profile}</p>
+                  <div className="mt-4 rounded-2xl border border-white/8 bg-black/20 px-4 py-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Illustrative monthly earning potential</div>
+                    <div className="mt-2 text-2xl font-black text-white">{item.monthly}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-20">
+          <SectionHeading
+            eyebrow="Risk Disclosure"
+            title="Performance assets still carry real risk"
+            text="Agentomics should be compelling, but it should also be honest. Historical performance, premium leagues, or AI branding do not remove technical, market, or legal risk."
+          />
+
+          <div className="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            {RISK_DISCLOSURES.map((risk) => (
+              <div key={risk.title} className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
+                <Shield className="h-6 w-6 text-amber-200" />
+                <h3 className="mt-4 text-xl font-bold text-white">{risk.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-gray-400">{risk.text}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 rounded-3xl border border-red-400/15 bg-red-400/5 p-8">
+            <p className="text-sm leading-8 text-gray-300">
+              NFAs should be understood as experimental, high-volatility digital assets. Buyers and operators are responsible for understanding smart contract interactions, automated execution behavior, and local regulatory constraints before participating.
+            </p>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-20">
+          <SectionHeading
+            eyebrow="AI Forge"
+            title="From text prompt to custom NFA"
+            text="AI Forge is the customization layer of Agentomics: describe a strategy in natural language, generate the initial concept with AI, test it in incubation, and mint the strongest ideas as ownable NFAs."
+          />
+
+          <div className="mt-12 grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="rounded-3xl border border-cyan-400/15 bg-cyan-400/5 p-8">
+              <div className="mb-3 inline-flex rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-300">
+                Forge UX flow
+              </div>
+              <div className="space-y-4">
+                {FORGE_FLOW.map((step, idx) => (
+                  <div key={step} className="flex gap-4 rounded-2xl border border-white/8 bg-black/20 p-4">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-400/15 text-sm font-black text-cyan-200">{idx + 1}</div>
+                    <p className="text-sm leading-7 text-gray-300">{step}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              {FORGE_PRICING.map((item) => (
+                <div key={item.title} className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-xl font-bold text-white">{item.title}</h3>
+                    <div className="text-lg font-black text-amber-200">{item.price}</div>
+                  </div>
+                  <p className="mt-3 text-sm leading-7 text-gray-400">{item.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-3">
+            {FORGE_EXAMPLES.map((item) => (
+              <div key={item.name} className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
+                <Sparkles className="h-6 w-6 text-cyan-300" />
+                <h3 className="mt-4 text-xl font-bold text-white">{item.name}</h3>
+                <p className="mt-3 text-sm leading-7 text-gray-400">{item.result}</p>
+              </div>
+            ))}
+          </div>
 
           <div className="mt-8 rounded-3xl border border-amber-400/20 bg-gradient-to-r from-amber-400/10 via-yellow-300/10 to-white/5 p-8 text-center">
             <div className="mx-auto max-w-3xl">
@@ -523,7 +719,7 @@ export default function AgentomicsPage() {
                 The edge is simple: verifiable on-chain battle track record
               </h2>
               <p className="mt-4 text-base leading-8 text-gray-300">
-                GemBots does not ask the market to trust a story. It shows battle count, WR, ELO, league access, and founder privileges directly in the product — making Agentomics legible and investable.
+                GemBots does not ask the market to trust a story. It shows battle count, WR, ELO, league access, founder privileges, and Forge pipeline directly in the product — making Agentomics legible and investable.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
                 <Link
@@ -537,6 +733,12 @@ export default function AgentomicsPage() {
                   className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-5 py-3 font-semibold text-cyan-200 transition-all hover:bg-cyan-400/15"
                 >
                   Explore Leagues
+                </Link>
+                <Link
+                  href="/forge"
+                  className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-400/10 px-5 py-3 font-semibold text-fuchsia-200 transition-all hover:bg-fuchsia-400/15"
+                >
+                  Open AI Forge
                 </Link>
                 <Link
                   href="/mint"
