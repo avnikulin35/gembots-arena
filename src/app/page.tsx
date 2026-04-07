@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { useContractStats } from '@/hooks/useNFAContract';
-import ChainGPTShowcase from '@/components/ChainGPTShowcase';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -279,7 +277,6 @@ function LiveTradingLeague() {
 
 export default function HomePage() {
   const [stats, setStats] = useState<StatsData | null>(null);
-  const contractStats = useContractStats();
 
   useEffect(() => {
     fetch('/api/stats')
@@ -380,7 +377,7 @@ export default function HomePage() {
           </motion.div>
         </section>
 
-        <section className="w-full max-w-6xl mx-auto px-6 pb-8">
+        <section className="w-full max-w-6xl mx-auto px-6 pb-12">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -434,11 +431,64 @@ export default function HomePage() {
         {/* ═══ 2. LIVE TRADING LEAGUE ═══ */}
         <LiveTradingLeague />
 
-        {/* ═══ 2.5. CHAINGPT SHOWCASE ═══ */}
-        <ChainGPTShowcase />
+        {/* ═══ 3. PARTNERS ═══ */}
+        <section className="w-full max-w-6xl mx-auto px-6 py-12">
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+            <div className="text-center mb-8">
+              <div className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-300">
+                Partners
+              </div>
+              <h2 className="mt-4 text-3xl sm:text-4xl font-black text-white">Powered by strategic AI partners</h2>
+              <p className="mt-3 text-gray-400 max-w-2xl mx-auto">
+                GemBots combines its own arena infrastructure with partner intelligence layers that strengthen trading, commentary, and Web3-native experimentation.
+              </p>
+            </div>
 
-        {/* ═══ 3. WHY OPEN SOURCE ═══ */}
-        <section className="w-full max-w-6xl mx-auto px-6 py-20 text-center">
+            <div className="rounded-2xl border border-cyan-500/25 bg-gradient-to-br from-cyan-500/8 via-gray-900/80 to-gray-950 p-8 sm:p-10">
+              <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-500 to-teal-600 text-xl font-black text-white shadow-[0_0_30px_rgba(20,184,166,0.25)]">
+                      CG
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-2xl font-black text-white">ChainGPT</h3>
+                        <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-cyan-300">Partner</span>
+                      </div>
+                      <p className="text-sm text-gray-400">Web3-native AI layer for trading intelligence, commentary, and ecosystem reach.</p>
+                    </div>
+                  </div>
+                  <p className="text-sm leading-8 text-gray-300">
+                    Instead of floating as a separate block, ChainGPT is now presented where it belongs: inside the partner narrative of the homepage. It reinforces GemBots as an open arena connected to broader AI and Web3 infrastructure.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="rounded-2xl border border-white/8 bg-black/20 p-4 text-center">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Role</div>
+                    <div className="mt-2 text-sm font-bold text-cyan-300">AI Partner</div>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-black/20 p-4 text-center">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Focus</div>
+                    <div className="mt-2 text-sm font-bold text-white">Trading + Web3</div>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-black/20 p-4 text-center">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Use case</div>
+                    <div className="mt-2 text-sm font-bold text-white">Signals / Commentary</div>
+                  </div>
+                  <div className="rounded-2xl border border-white/8 bg-black/20 p-4 text-center">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Positioning</div>
+                    <div className="mt-2 text-sm font-bold text-[#F0B90B]">Integrated Partner</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </section>
+
+        {/* ═══ 4. WHY OPEN SOURCE ═══ */}
+        <section className="w-full max-w-6xl mx-auto px-6 py-16 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <h2 className="text-3xl sm:text-4xl font-black mb-4">Why <span className="text-green-400">Open Source</span>?</h2>
             <p className="text-gray-400 mb-12 max-w-xl mx-auto">
@@ -457,8 +507,8 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ═══ 4. HOW IT WORKS ═══ */}
-        <section className="w-full max-w-6xl mx-auto px-6 py-20 text-center">
+        {/* ═══ 5. HOW IT WORKS ═══ */}
+        <section className="w-full max-w-6xl mx-auto px-6 py-16 text-center">
           <motion.h2 initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-3xl sm:text-4xl font-black mb-4">
             How It Works
           </motion.h2>
@@ -476,8 +526,8 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ═══ 5. CONTRACT + CTA ═══ */}
-        <section className="w-full max-w-6xl mx-auto px-6 py-20 text-center">
+        {/* ═══ 6. CONTRACT + CTA ═══ */}
+        <section className="w-full max-w-6xl mx-auto px-6 py-16 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
             className="rounded-2xl border border-[#F0B90B]/20 bg-gradient-to-br from-[#F0B90B]/5 to-transparent p-8 sm:p-12">
             <h2 className="text-3xl sm:text-4xl font-black mb-4">Verified on <span className="text-[#F0B90B]">BNB Chain</span></h2>
@@ -512,8 +562,8 @@ export default function HomePage() {
           </motion.div>
         </section>
 
-        {/* ═══ 6. WHY GEMBOTS — COMPETITOR COMPARISON ═══ */}
-        <section className="py-20 px-6">
+        {/* ═══ 7. WHY GEMBOTS — COMPETITOR COMPARISON ═══ */}
+        <section className="py-16 px-6">
           <motion.div className="max-w-4xl mx-auto" initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
             <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">Why <span className="text-[#F0B90B]">GemBots</span>?</h2>
             <p className="text-gray-400 text-center mb-10 max-w-xl mx-auto">The only AI arena with on-chain verified strategies, real crypto trading, and live spectating.</p>
