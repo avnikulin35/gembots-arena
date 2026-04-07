@@ -111,7 +111,7 @@ const LAUNCH_PHASES = [
     title: 'Public Mint',
     status: 'Next',
     icon: Rocket,
-    text: 'Bronze public mint opens, Silver and Gold pre-builts launch, AI Forge opens, and model caps get enforced.',
+    text: 'Bronze public mint opens, Silver and Gold pre-builts launch, while Diamond remains Genesis-only or earned via upgrade.',
   },
   {
     phase: 'Phase 3',
@@ -134,6 +134,22 @@ const LAUNCH_PHASES = [
     icon: LineChart,
     text: 'NFAs execute real DEX trades with profit sharing, strict risk controls, and stronger value capture for owners.',
   },
+];
+
+const GENESIS_PRIVILEGES = [
+  'Auto-Diamond tier from day one — no 100-win grind required.',
+  'Lifetime revenue share: 0.1% of all platform fees per Genesis NFA.',
+  'Champions League access with free entry for life.',
+  'Founder governance vote with 10× weight.',
+  'Permanent Genesis on-chain badge that cannot be minted later.',
+  'Priority access to AI Forge and new model drops.',
+];
+
+const GENESIS_DISTRIBUTION = [
+  { label: 'Community / Public sale / Airdrops', amount: 60, color: 'from-yellow-400 to-amber-500' },
+  { label: 'ChainGPT Partnership', amount: 20, color: 'from-fuchsia-400 to-purple-500' },
+  { label: 'Team · vested 6 months', amount: 10, color: 'from-cyan-400 to-sky-500' },
+  { label: 'Reserve / Advisors', amount: 10, color: 'from-emerald-400 to-green-500' },
 ];
 
 function SectionHeading({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
@@ -263,6 +279,53 @@ export default function AgentomicsPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-20">
+          <SectionHeading
+            eyebrow="Genesis NFAs"
+            title="Genesis holders get permanent privileges, not just collectible status"
+            text="Genesis NFAs are the foundational Diamond-class assets of the ecosystem. They carry permanent rights across revenue share, governance, leagues, and AI Forge access."
+          />
+
+          <div className="mt-12 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-3xl border border-amber-400/15 bg-white/[0.04] p-8">
+              <div className="mb-5 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">
+                Distribution · 100 Genesis NFAs
+              </div>
+              <div className="mx-auto flex h-72 w-72 items-center justify-center rounded-full" style={{ background: 'conic-gradient(#facc15 0% 60%, #d946ef 60% 80%, #38bdf8 80% 90%, #4ade80 90% 100%)' }}>
+                <div className="flex h-44 w-44 flex-col items-center justify-center rounded-full border border-white/8 bg-[#0b0d16] text-center shadow-[inset_0_0_20px_rgba(245,158,11,0.14)]">
+                  <div className="text-4xl font-black text-white">100</div>
+                  <div className="mt-1 text-xs uppercase tracking-[0.18em] text-gray-400">Genesis NFAs</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4">
+              {GENESIS_DISTRIBUTION.map((item) => (
+                <div key={item.label} className="rounded-2xl border border-white/8 bg-white/[0.04] p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-white">{item.label}</div>
+                    <div className="text-sm font-black text-amber-200">{item.amount}%</div>
+                  </div>
+                  <div className="h-3 overflow-hidden rounded-full bg-white/6">
+                    <div className={`h-full rounded-full bg-gradient-to-r ${item.color}`} style={{ width: `${item.amount}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {GENESIS_PRIVILEGES.map((privilege) => (
+              <div key={privilege} className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/20 to-yellow-300/20 text-amber-200">
+                  <Crown className="h-5 w-5" />
+                </div>
+                <p className="text-sm leading-7 text-gray-300">{privilege}</p>
+              </div>
+            ))}
           </div>
         </section>
 
