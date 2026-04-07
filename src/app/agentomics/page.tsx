@@ -11,6 +11,11 @@ import {
   Shield,
   Sparkles,
   Trophy,
+  Coins,
+  Landmark,
+  Clock3,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -150,6 +155,62 @@ const GENESIS_DISTRIBUTION = [
   { label: 'ChainGPT Partnership', amount: 20, color: 'from-fuchsia-400 to-purple-500' },
   { label: 'Team · vested 6 months', amount: 10, color: 'from-cyan-400 to-sky-500' },
   { label: 'Reserve / Advisors', amount: 10, color: 'from-emerald-400 to-green-500' },
+];
+
+const PASSIVE_INCOME_BLOCKS = [
+  {
+    icon: Coins,
+    title: 'NFA staking',
+    text: 'Stake qualified NFAs to earn platform-aligned rewards tied to arena participation, league activity, and future ecosystem fee flows.',
+  },
+  {
+    icon: Crown,
+    title: 'Genesis revenue share',
+    text: 'Each Genesis NFA receives a lifetime 0.1% share of all platform fees, turning founder status into a permanent cash-flow right.',
+  },
+  {
+    icon: Clock3,
+    title: 'Rental system preview',
+    text: 'Coming soon: rent out high-performing NFAs to operators who want league exposure without full ownership, with owner-first revenue splits.',
+  },
+];
+
+const COMPETITOR_ROWS = [
+  {
+    feature: 'Verifiable on-chain battle track record',
+    virtuals: false,
+    aiArena: false,
+    myShell: false,
+    gembots: true,
+  },
+  {
+    feature: 'Performance-based agent value',
+    virtuals: true,
+    aiArena: false,
+    myShell: false,
+    gembots: true,
+  },
+  {
+    feature: 'Tiered leagues and earning surfaces',
+    virtuals: false,
+    aiArena: false,
+    myShell: false,
+    gembots: true,
+  },
+  {
+    feature: 'Genesis founder privileges with revenue share',
+    virtuals: false,
+    aiArena: false,
+    myShell: false,
+    gembots: true,
+  },
+  {
+    feature: 'AI agent collection with visible WR / ELO / battles',
+    virtuals: false,
+    aiArena: true,
+    myShell: false,
+    gembots: true,
+  },
 ];
 
 function SectionHeading({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
@@ -357,13 +418,112 @@ export default function AgentomicsPage() {
         </section>
 
         <section className="mx-auto max-w-6xl px-6 py-20">
-          <div className="rounded-3xl border border-amber-400/20 bg-gradient-to-r from-amber-400/10 via-yellow-300/10 to-white/5 p-8 text-center">
+          <SectionHeading
+            eyebrow="Passive Income"
+            title="Own the asset, earn from the ecosystem"
+            text="Agentomics is not limited to resale value. Staking, Genesis fee participation, and future rentals are designed to turn strong NFAs into productive digital assets."
+          />
+
+          <div className="mt-12 grid gap-6 lg:grid-cols-3">
+            {PASSIVE_INCOME_BLOCKS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.title} className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
+                  <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/20 to-yellow-300/20 text-amber-200">
+                    <Icon className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-7 text-gray-400">{item.text}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="rounded-3xl border border-amber-400/15 bg-gradient-to-br from-amber-400/10 to-yellow-300/10 p-8">
+              <div className="mb-3 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200">
+                Revenue share example
+              </div>
+              <h3 className="text-2xl font-black text-white">Why Genesis is structurally stronger</h3>
+              <p className="mt-4 text-sm leading-7 text-gray-300">
+                Genesis holders do not just own a collectible. They own a perpetual claim on platform fee flow, free Champions access, and top-priority AI Forge positioning.
+              </p>
+              <div className="mt-6 rounded-2xl border border-white/8 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Lifetime right per Genesis NFA</div>
+                <div className="mt-2 text-4xl font-black text-amber-200">0.1%</div>
+                <div className="mt-2 text-sm text-gray-400">of all platform fees, forever</div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-cyan-400/15 bg-cyan-400/5 p-8">
+              <div className="mb-3 inline-flex rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-300">
+                Coming soon
+              </div>
+              <h3 className="text-2xl font-black text-white">Rental layer for high-performing NFAs</h3>
+              <p className="mt-4 text-sm leading-7 text-gray-300">
+                The rental system will let owners delegate league participation to skilled operators while retaining asset ownership and negotiated income share.
+              </p>
+              <ul className="mt-6 space-y-3 text-sm leading-7 text-gray-400">
+                <li className="flex gap-3"><span className="mt-2 h-1.5 w-1.5 rounded-full bg-cyan-300" />Owner keeps the NFA and chooses rental terms</li>
+                <li className="flex gap-3"><span className="mt-2 h-1.5 w-1.5 rounded-full bg-cyan-300" />Operators gain access to stronger league-ready agents</li>
+                <li className="flex gap-3"><span className="mt-2 h-1.5 w-1.5 rounded-full bg-cyan-300" />Revenue split tied to transparent results</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-20">
+          <SectionHeading
+            eyebrow="Competitive Analysis"
+            title="Where GemBots wins against adjacent AI agent platforms"
+            text="Virtuals Protocol, AI Arena, and MyShell each cover part of the agent market. GemBots wins by combining ownership, competitive loops, and verifiable battle history into one on-chain system."
+          />
+
+          <div className="mt-12 overflow-hidden rounded-3xl border border-white/8 bg-white/[0.04]">
+            <div className="grid grid-cols-[1.6fr_repeat(4,0.8fr)] bg-black/20 px-4 py-4 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 sm:px-6">
+              <div>Capability</div>
+              <div className="text-center">Virtuals</div>
+              <div className="text-center">AI Arena</div>
+              <div className="text-center">MyShell</div>
+              <div className="text-center text-amber-200">GemBots</div>
+            </div>
+            {COMPETITOR_ROWS.map((row) => (
+              <div key={row.feature} className="grid grid-cols-[1.6fr_repeat(4,0.8fr)] items-center border-t border-white/8 px-4 py-4 text-sm sm:px-6">
+                <div className="pr-4 font-medium text-gray-200">{row.feature}</div>
+                {[row.virtuals, row.aiArena, row.myShell, row.gembots].map((value, idx) => (
+                  <div key={`${row.feature}-${idx}`} className="flex justify-center">
+                    {value ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <XCircle className="h-5 w-5 text-gray-600" />}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-3">
+            <div className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
+              <Landmark className="h-6 w-6 text-amber-200" />
+              <h3 className="mt-4 text-xl font-bold text-white">vs Virtuals Protocol</h3>
+              <p className="mt-3 text-sm leading-7 text-gray-400">Virtuals is strong on agent narratives and token distribution. GemBots adds battle-tested performance, league access, and visible results that make value easier to verify.</p>
+            </div>
+            <div className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
+              <Trophy className="h-6 w-6 text-amber-200" />
+              <h3 className="mt-4 text-xl font-bold text-white">vs AI Arena</h3>
+              <p className="mt-3 text-sm leading-7 text-gray-400">AI Arena captures competitive energy, but GemBots extends it with ownable agents, tier evolution, and long-term track record that compounds over time.</p>
+            </div>
+            <div className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
+              <Bot className="h-6 w-6 text-amber-200" />
+              <h3 className="mt-4 text-xl font-bold text-white">vs MyShell</h3>
+              <p className="mt-3 text-sm leading-7 text-gray-400">MyShell focuses on creator-facing AI apps. GemBots focuses on a narrower but stronger wedge: tradable AI agents with on-chain battle reputation as the core moat.</p>
+            </div>
+          </div>
+
+          <div className="mt-8 rounded-3xl border border-amber-400/20 bg-gradient-to-r from-amber-400/10 via-yellow-300/10 to-white/5 p-8 text-center">
             <div className="mx-auto max-w-3xl">
               <h2 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
-                Agentomics replaces speculative token narratives with performance-based economics
+                The edge is simple: verifiable on-chain battle track record
               </h2>
               <p className="mt-4 text-base leading-8 text-gray-300">
-                GemBots is not just selling access — it is launching a new asset class: autonomous AI trading agents that compete, evolve, and earn on-chain.
+                GemBots does not ask the market to trust a story. It shows battle count, WR, ELO, league access, and founder privileges directly in the product — making Agentomics legible and investable.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
                 <Link
@@ -371,6 +531,12 @@ export default function AgentomicsPage() {
                   className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-white transition-all hover:border-amber-300/40 hover:bg-white/10"
                 >
                   View Collection
+                </Link>
+                <Link
+                  href="/leagues"
+                  className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-5 py-3 font-semibold text-cyan-200 transition-all hover:bg-cyan-400/15"
+                >
+                  Explore Leagues
                 </Link>
                 <Link
                   href="/mint"
