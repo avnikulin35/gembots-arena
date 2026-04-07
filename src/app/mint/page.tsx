@@ -31,12 +31,14 @@ const TIERS = [
     name: 'Bronze',
     emoji: '🥉',
     tierIndex: 0,
-    fee: '0.01',
+    fee: '0.1',
+    usd: '~$60',
     models: ['meta-llama/llama-3.1-8b-instruct:free', 'mistralai/mistral-7b-instruct:free'],
     modelNames: ['Llama 3.1 8B', 'Mistral 7B'],
     byok: false,
-    description: 'Free AI models. Perfect for getting started.',
-    features: ['Free AI models', 'Trading League battles', 'P&L tracking'],
+    purchasable: true,
+    description: 'Random model, random strategy, zero battle history.',
+    features: ['Random model allocation', 'Random strategy at launch', 'No prior battle record', 'Best entry point into the arena'],
     color: '#CD7F32',
     glowColor: 'rgba(205,127,50,0.35)',
     gradient: 'from-amber-900/30 to-yellow-900/20',
@@ -48,12 +50,14 @@ const TIERS = [
     name: 'Silver',
     emoji: '🥈',
     tierIndex: 1,
-    fee: '0.03',
+    fee: '0.3',
+    usd: '~$180',
     models: ['openai/gpt-4o-mini', 'google/gemini-2.0-flash-exp:free', 'anthropic/claude-3.5-haiku'],
     modelNames: ['GPT-4o Mini', 'Gemini 2.0 Flash', 'Claude 3.5 Haiku'],
     byok: true,
-    description: 'Bring your own API key. Stronger models.',
-    features: ['Mid-tier AI models', 'Custom name & emoji', 'Priority matchmaking', 'BYOK — your key, your control'],
+    purchasable: true,
+    description: 'Curated model with 10+ pre-battles and stronger launch credibility.',
+    features: ['Curated model selection', '10+ pre-battles simulated', 'Faster league-ready start', 'BYOK — your key, your control'],
     color: '#C0C0C0',
     glowColor: 'rgba(192,192,192,0.35)',
     gradient: 'from-gray-600/30 to-gray-700/20',
@@ -65,17 +69,38 @@ const TIERS = [
     name: 'Gold',
     emoji: '🥇',
     tierIndex: 2,
-    fee: '0.1',
+    fee: '0.75',
+    usd: '~$450',
     models: ['anthropic/claude-sonnet-4-5', 'openai/gpt-4o', 'google/gemini-2.5-pro'],
     modelNames: ['Claude Sonnet 4.5', 'GPT-4o', 'Gemini 2.5 Pro'],
     byok: true,
-    description: 'Top-tier models. Maximum competitive edge.',
-    features: ['Premium AI models', 'Custom everything', 'ELO boost +50', 'Priority matchmaking', 'BYOK — your key, your control'],
+    purchasable: true,
+    description: 'Top model, 50+ battles, proven track record before mint.',
+    features: ['Top-tier model allocation', '50+ battle track record', 'Higher launch reputation', 'Best public mint tier'],
     color: '#FFD700',
     glowColor: 'rgba(255,215,0,0.4)',
     gradient: 'from-yellow-700/30 to-amber-800/20',
     borderColor: 'border-yellow-500/50',
     accentText: 'text-yellow-400',
+  },
+  {
+    id: 'diamond',
+    name: 'Diamond',
+    emoji: '💎',
+    tierIndex: 3,
+    fee: '1.5',
+    usd: '~$900',
+    models: ['genesis-only'],
+    modelNames: ['Genesis / upgrade path only'],
+    byok: false,
+    purchasable: false,
+    description: 'Not sold through public mint. Reserved for Genesis NFAs or earned upgrades.',
+    features: ['Genesis auto-Diamond status', 'Champions League positioning', 'Premium earning profile', 'Obtained via Genesis or evolution'],
+    color: '#7dd3fc',
+    glowColor: 'rgba(125,211,252,0.35)',
+    gradient: 'from-cyan-700/30 to-sky-800/20',
+    borderColor: 'border-cyan-400/50',
+    accentText: 'text-cyan-300',
   },
 ];
 
@@ -223,7 +248,7 @@ export default function MintPage() {
   // ============================================================================
 
   const handleMint = async () => {
-    if (!signer || !selectedTier) return;
+    if (!signer || !selectedTier || !selectedTier.purchasable) return;
     setMinting(true);
     setMintError(null);
     setTxHash(null);
@@ -400,8 +425,8 @@ export default function MintPage() {
               </span>
             </h1>
             {(step === 1 && !mintedId) && (
-              <p className="text-gray-400 text-lg max-w-xl mx-auto">
-                Create a Non-Fungible Agent on BNB Chain. Choose your tier, configure your bot, and enter the Arena.
+              <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+                Mint an AI trading agent on BNB Chain. Choose your pricing tier, review what you get, and launch into the arena with a real Agentomics profile.
               </p>
             )}
           </motion.div>
@@ -521,24 +546,40 @@ export default function MintPage() {
             >
               <div className="text-center mb-2">
                 <h2 className="text-xl font-bold text-white">Choose Your Tier</h2>
-                <p className="text-sm text-gray-400 mt-1">Higher tiers unlock stronger AI models</p>
+                <p className="text-sm text-gray-400 mt-1">Public mint supports Bronze, Silver, and Gold. Diamond is Genesis-only or earned via upgrade.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="mb-6 rounded-2xl border border-[#F0B90B]/20 bg-[#F0B90B]/8 p-5">
+                <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-[#F0B90B]">Pricing overview</h3>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {TIERS.map((tier) => (
+                    <div key={`${tier.id}-pricing`} className="rounded-xl border border-white/8 bg-black/20 p-4 text-left">
+                      <div className="text-sm font-bold" style={{ color: tier.color }}>{tier.emoji} {tier.name}</div>
+                      <div className="mt-2 text-2xl font-black text-white">{tier.fee} BNB</div>
+                      <div className="text-sm text-gray-400">({tier.usd})</div>
+                      <div className="mt-2 text-xs text-gray-500">{tier.purchasable ? 'Available in mint flow' : 'Not sold via mint'}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 {TIERS.map((tier) => {
                   const isSelected = selectedTier?.id === tier.id;
                   return (
                     <button
                       key={tier.id}
                       onClick={() => {
+                        if (!tier.purchasable) return;
                         setSelectedTier(tier);
                         setSelectedModel(tier.models[0]);
                       }}
+                      disabled={!tier.purchasable}
                       className={`relative p-6 rounded-2xl border-2 transition-all text-left group ${
                         isSelected
                           ? `bg-gradient-to-b ${tier.gradient} ${tier.borderColor}`
                           : 'bg-gray-800/30 border-gray-700/50 hover:border-gray-600'
-                      }`}
+                      } ${!tier.purchasable ? 'cursor-not-allowed opacity-70' : ''}`}
                       style={isSelected ? { boxShadow: `0 0 25px ${tier.glowColor}` } : {}}
                     >
                       {/* Popular badge for Gold */}
@@ -556,10 +597,17 @@ export default function MintPage() {
                           <span className="text-2xl font-bold text-white">{tier.fee}</span>
                           <span className="text-gray-400 text-sm ml-1">BNB</span>
                         </div>
+                        <div className="text-xs text-gray-500 mt-1">({tier.usd})</div>
                       </div>
 
                       {/* Description */}
                       <p className="text-xs text-gray-400 text-center mb-4">{tier.description}</p>
+
+                      {!tier.purchasable && (
+                        <div className="mb-4 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-300">
+                          Genesis or upgrade only
+                        </div>
+                      )}
 
                       {/* Models */}
                       <div className="mb-4">
@@ -925,6 +973,10 @@ export default function MintPage() {
                     <span className="text-lg font-bold text-yellow-400">{effectiveFee} BNB</span>
                   </div>
                   <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">Tier Price Guide</span>
+                    <span className="text-sm text-gray-300">{selectedTier.usd}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-400">Estimated Gas</span>
                     <span className="text-sm text-yellow-400 font-mono">
                       {gasEstimate ? `~${parseFloat(gasEstimate).toFixed(6)} BNB` : 'Estimating...'}
@@ -963,7 +1015,7 @@ export default function MintPage() {
                 ) : (
                   <button
                     onClick={handleMint}
-                    disabled={minting}
+                    disabled={minting || !selectedTier.purchasable}
                     className="px-8 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg hover:shadow-[0_0_20px_rgba(147,51,234,0.3)] transition-all disabled:opacity-50"
                   >
                     {minting ? (
