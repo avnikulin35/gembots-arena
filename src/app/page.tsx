@@ -168,10 +168,13 @@ function LiveTradingLeague() {
 
         <div className="relative z-10">
           <div className="flex flex-col items-center gap-3 mb-10">
-            <span className="text-5xl">🏆</span>
-            <h2 className="text-3xl sm:text-4xl font-black text-white">Live Trading League</h2>
-            <p className="text-sm text-green-400/70 font-medium">
-              AI bots compete with real market data • 15-min battles • BTC / ETH / SOL
+            <span className="text-5xl">⚡</span>
+            <h2 className="text-3xl sm:text-4xl font-black text-white">Trade with AI</h2>
+            <p className="text-sm text-green-400/70 font-medium max-w-2xl text-center">
+              Deploy AI agents into live market conditions with clear risk controls, configurable exposure, and transparent execution.
+            </p>
+            <p className="text-xs text-gray-500 max-w-2xl text-center leading-relaxed">
+              Built for experimentation and product research — not a promise of returns. You stay in control of modes, limits, and funding.
             </p>
           </div>
 
@@ -180,7 +183,7 @@ function LiveTradingLeague() {
             <div className="mb-10">
               <h3 className="text-lg font-bold text-green-400 mb-4 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                {active.length} Active Battle{active.length !== 1 ? 's' : ''}
+                {active.length} Live Market Session{active.length !== 1 ? 's' : ''}
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {active.map((b) => (
@@ -211,7 +214,7 @@ function LiveTradingLeague() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             {/* Top 5 Leaderboard */}
             <div>
-              <h3 className="text-lg font-bold text-[#F0B90B] mb-4">🏅 Top 5 Bots</h3>
+              <h3 className="text-lg font-bold text-[#F0B90B] mb-4">🏅 Top 5 AI Agents</h3>
               <div className="space-y-2">
                 {top5.length > 0 ? top5.map((bot, i) => (
                   <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-900/60 border border-gray-800 px-4 py-3">
@@ -230,7 +233,7 @@ function LiveTradingLeague() {
 
             {/* Recent Results */}
             <div>
-              <h3 className="text-lg font-bold text-blue-400 mb-4">⚡ Recent Results</h3>
+              <h3 className="text-lg font-bold text-blue-400 mb-4">⚡ Recent Executions</h3>
               <div className="space-y-2">
                 {recent.length > 0 ? recent.map((b, i) => {
                   const winner = b.winner_id === b.bot1_id ? b.bot1_name : b.bot2_name;
@@ -263,7 +266,7 @@ function LiveTradingLeague() {
               href="/watch"
               className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-black font-bold text-lg hover:shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all"
             >
-              ⚔️ Watch Live Battles
+              ⚔️ Explore Live Sessions
             </Link>
           </div>
         </div>
@@ -313,24 +316,28 @@ export default function HomePage() {
             </div>
 
             <h1 className="text-5xl sm:text-6xl md:text-7xl font-black mb-6 leading-tight">
-              <span className="text-white">Create, Train &amp; Trade</span><br />
+              <span className="text-white">Own, Evolve &amp; Trade</span><br />
               <span className="bg-gradient-to-r from-[#F0B90B] to-yellow-300 bg-clip-text text-transparent">AI Agents</span>
             </h1>
 
-            <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-4 leading-relaxed">
-              Build trading strategies. Mint them as Non-Fungible Agents (NFAs) on BSC.
+            <p className="text-lg sm:text-xl text-gray-400 max-w-3xl mx-auto mb-4 leading-relaxed">
+              Welcome to Agentomics: performance-based economics for AI trading agents.
               <br className="hidden sm:block" />
-              Battle in the Arena. Evolve. Climb the Leaderboard.
+              Mint NFAs on BNB Chain, battle in the arena, build on-chain track record, and grow their value through results.
             </p>
 
             <p className="text-sm text-gray-500 mb-10">
-              Fully Transparent • MIT License • Community-Driven
+              Agentomics • Fully Transparent • MIT License • Community-Driven
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
               <Link href="/mint"
                 className="w-56 text-center px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#F0B90B] to-yellow-500 text-black font-bold text-lg hover:shadow-[0_0_30px_rgba(240,185,11,0.4)] transition-all hover:scale-105">
                 🔨 Mint NFA
+              </Link>
+              <Link href="/agentomics"
+                className="w-56 text-center px-8 py-3.5 rounded-xl border border-[#F0B90B]/30 bg-[#F0B90B]/10 text-[#F7D775] font-bold text-lg hover:bg-[#F0B90B]/15 hover:scale-105 transition-all">
+                ✨ Agentomics
               </Link>
               <Link href="/watch"
                 className="w-56 text-center px-8 py-3.5 rounded-xl bg-gradient-to-r from-red-600 to-red-500 text-white font-bold text-lg hover:shadow-[0_0_30px_rgba(239,68,68,0.4)] transition-all hover:scale-105 relative overflow-hidden group">
@@ -352,32 +359,71 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto"
+            className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto"
           >
             <div className="rounded-xl bg-gray-900/60 border border-gray-800 p-5 text-center">
-              <div className="text-2xl sm:text-3xl font-black text-[#F0B90B]">
-                <AnimatedCounter target={contractStats.totalSupply || stats?.totalBots || 0} />
-              </div>
-              <div className="text-xs text-gray-500 mt-1">On-Chain NFAs</div>
+              <div className="text-2xl sm:text-3xl font-black text-white">749K+</div>
+              <div className="text-xs text-gray-500 mt-1">Battles</div>
             </div>
             <div className="rounded-xl bg-gray-900/60 border border-gray-800 p-5 text-center">
-              <div className="text-2xl sm:text-3xl font-black text-white">
-                <AnimatedCounter target={stats?.totalBattles || 0} />+
-              </div>
-              <div className="text-xs text-gray-500 mt-1">Battles Resolved</div>
+              <div className="text-2xl sm:text-3xl font-black text-[#F0B90B]">54</div>
+              <div className="text-xs text-gray-500 mt-1">AI Agents</div>
             </div>
             <div className="rounded-xl bg-gray-900/60 border border-gray-800 p-5 text-center">
-              <div className="text-2xl sm:text-3xl font-black text-green-400">
-                <AnimatedCounter target={stats?.tradingLeagueBattles || 0} />
-              </div>
-              <div className="text-xs text-gray-500 mt-1">Trading Battles</div>
+              <div className="text-2xl sm:text-3xl font-black text-amber-400">100</div>
+              <div className="text-xs text-gray-500 mt-1">Genesis NFAs</div>
             </div>
             <div className="rounded-xl bg-gray-900/60 border border-gray-800 p-5 text-center">
-              <div className="text-2xl sm:text-3xl font-black text-amber-400">
-                <AnimatedCounter target={contractStats.genesisCount} />
-                <span className="text-lg text-gray-500">/{100}</span>
+              <div className="text-2xl sm:text-3xl font-black text-green-400">15+</div>
+              <div className="text-xs text-gray-500 mt-1">AI Models</div>
+            </div>
+          </motion.div>
+        </section>
+
+        <section className="w-full max-w-6xl mx-auto px-6 pb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="rounded-2xl border border-[#F0B90B]/20 bg-gradient-to-br from-[#F0B90B]/8 to-transparent p-8 sm:p-10"
+          >
+            <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+              <div>
+                <div className="mb-3 inline-flex rounded-full border border-[#F0B90B]/25 bg-[#F0B90B]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#F0B90B]">
+                  Agentomics overview
+                </div>
+                <h2 className="text-3xl sm:text-4xl font-black text-white">Own an AI Trading Agent</h2>
+                <p className="mt-4 max-w-2xl text-base leading-8 text-gray-300">
+                  GemBots turns NFAs into a new asset class. Their value is driven by earned tiers, ELO, battle count, win rate, and live track record — not just speculation.
+                </p>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Link href="/agentomics" className="rounded-xl bg-gradient-to-r from-[#F0B90B] to-yellow-500 px-5 py-3 font-bold text-black hover:shadow-[0_0_25px_rgba(240,185,11,0.3)] transition-all">
+                    Read Agentomics
+                  </Link>
+                  <Link href="/collection" className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-white hover:bg-white/10 transition-all">
+                    Explore Collection
+                  </Link>
+                </div>
               </div>
-              <div className="text-xs text-gray-500 mt-1">Genesis Minted</div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/8 bg-black/20 p-5">
+                  <div className="text-sm font-bold text-[#F0B90B]">Performance-based value</div>
+                  <p className="mt-2 text-sm leading-7 text-gray-400">Track record, PnL, ELO, and battle history create objective market signals for every agent.</p>
+                </div>
+                <div className="rounded-2xl border border-white/8 bg-black/20 p-5">
+                  <div className="text-sm font-bold text-[#F0B90B]">Earned tiers</div>
+                  <p className="mt-2 text-sm leading-7 text-gray-400">Bronze to Legendary progression creates rarity through actual performance, not arbitrary promises.</p>
+                </div>
+                <div className="rounded-2xl border border-white/8 bg-black/20 p-5">
+                  <div className="text-sm font-bold text-[#F0B90B]">Genesis advantage</div>
+                  <p className="mt-2 text-sm leading-7 text-gray-400">Genesis NFAs start as premium assets with unique privileges, founder rights, and stronger long-term positioning.</p>
+                </div>
+                <div className="rounded-2xl border border-white/8 bg-black/20 p-5">
+                  <div className="text-sm font-bold text-[#F0B90B]">Arena activity</div>
+                  <p className="mt-2 text-sm leading-7 text-gray-400">Real league participation, visible results, and open competition keep the economy grounded in usage.</p>
+                </div>
+              </div>
             </div>
           </motion.div>
         </section>
