@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { BarChart3, Filter, Flame, Layers3, RefreshCcw, ShieldCheck, Trophy } from 'lucide-react';
 import { getRobotImage } from '@/lib/robot-images';
-import { TIER_COLORS, TIER_GRADIENTS, TIER_GLOW, TIER_NAMES } from '@/lib/nfa';
+import { TIER_COLORS, TIER_GLOW } from '@/lib/nfa';
 
 interface CollectionNFA {
   id: number;
@@ -296,7 +296,7 @@ export default function CollectionPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((nfa, index) => (
             <NFACard key={nfa.nfaId} nfa={nfa} index={index} />
           ))}
@@ -328,7 +328,6 @@ function StatCard({ label, value, hint, icon }: { label: string; value: string; 
 function NFACard({ nfa, index }: { nfa: CollectionNFA; index: number }) {
   const tierLabel = inferTierLabel(nfa);
   const tierIndex = TIER_INDEX[tierLabel] ?? 0;
-  const tierGradient = TIER_GRADIENTS[tierIndex] || 'from-[#CD7F32]/20 to-[#8B5E3C]/20 border-[#CD7F32]/40';
   const tierGlow = TIER_GLOW[tierIndex] || 'shadow-[0_0_20px_rgba(240,185,11,0.15)]';
   const tierColor = TIER_COLORS[tierIndex] || '#F0B90B';
   const robotImage = getRobotImage(nfa.nfaId);
@@ -336,12 +335,13 @@ function NFACard({ nfa, index }: { nfa: CollectionNFA; index: number }) {
 
   return (
     <motion.div
+      className="h-full"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.6) }}
     >
-      <Link href={`/bot/${nfa.nfaId}`}>
-        <div className={`group overflow-hidden rounded-3xl border border-white/8 bg-gradient-to-br ${tierGradient} ${tierGlow} transition-all duration-300 hover:-translate-y-1`}>
+      <Link href={`/bot/${nfa.nfaId}`} className="block h-full">
+        <div className={`group flex h-full min-h-[760px] flex-col overflow-hidden rounded-3xl border border-white/8 bg-[#0b0f17] ${tierGlow} transition-all duration-300 hover:-translate-y-1`}>
           <div className="relative aspect-[1.08] bg-black/25 p-4">
             <Image
               src={robotImage}
@@ -374,7 +374,7 @@ function NFACard({ nfa, index }: { nfa: CollectionNFA; index: number }) {
             </div>
           </div>
 
-          <div className="p-5">
+          <div className="flex flex-1 flex-col p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-xl font-black text-white transition-colors group-hover:text-[#F0B90B]">{nfa.name}</h3>
@@ -405,10 +405,12 @@ function NFACard({ nfa, index }: { nfa: CollectionNFA; index: number }) {
               </div>
             )}
 
-            <div className="mt-5 h-px w-full bg-gradient-to-r from-transparent via-[#F0B90B]/30 to-transparent" />
-            <div className="mt-4 flex items-center justify-between text-sm">
-              <span className="text-gray-500">Track record first</span>
-              <span className="font-semibold text-[#F0B90B]">View NFA →</span>
+            <div className="mt-auto pt-5">
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-[#F0B90B]/30 to-transparent" />
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <span className="text-gray-500">Track record first</span>
+                <span className="font-semibold text-[#F0B90B]">View NFA →</span>
+              </div>
             </div>
           </div>
         </div>
