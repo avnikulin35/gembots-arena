@@ -290,9 +290,6 @@ export default function HomePage() {
         {/* ═══ 1. HERO ═══ */}
         <section className="w-full max-w-6xl mx-auto px-6 pt-20 pb-16 text-center">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
             className="flex flex-col items-center"
           >
             {/* Badges */}
@@ -350,9 +347,6 @@ export default function HomePage() {
 
           {/* Stats bar */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
             className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto"
           >
             <div className="rounded-xl bg-gray-900/60 border border-gray-800 p-5 text-center">
@@ -581,8 +575,7 @@ export default function HomePage() {
                 ['Open Source', '❌', '❌', '✅', '✅'],
               ].map(([feature, ca, aa, lb, gb], i) => (
                 <motion.div key={i}
-                  className="grid grid-cols-[1fr_64px_64px_72px_72px] sm:grid-cols-[1fr_90px_90px_100px_100px] gap-1 items-center bg-gray-900/60 border border-gray-800/50 rounded-lg px-3 py-3"
-                  initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 + i * 0.04, duration: 0.35 }}>
+                  className="grid grid-cols-[1fr_64px_64px_72px_72px] sm:grid-cols-[1fr_90px_90px_100px_100px] gap-1 items-center bg-gray-900/60 border border-gray-800/50 rounded-lg px-3 py-3">
                   <div className="text-xs sm:text-sm text-gray-300 font-medium">{feature}</div>
                   <div className="text-center text-base sm:text-lg">{ca}</div>
                   <div className="text-center text-base sm:text-lg">{aa}</div>
