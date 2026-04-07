@@ -1,278 +1,292 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
-
-function AuditBadge() {
-  const [score, setScore] = useState<number | null>(null);
-  useEffect(() => {
-    fetch('/api/ai/audit')
-      .then(r => r.json())
-      .then(d => { if (d.score) setScore(d.score); })
-      .catch(() => {});
-  }, []);
-  if (score === null) return null;
-  return (
-    <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-900/20 border border-green-700/50">
-      <span className="text-lg">🛡️</span>
-      <span className="text-green-400 font-semibold">Audited by AI</span>
-      <span className="text-white font-bold">{score}%</span>
-    </div>
-  );
-}
+import type { ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getRobotImage, getArenaId } from '@/lib/robot-images';
-import {
-  TIER_NAMES,
-  TIER_COLORS,
-  TIER_GRADIENTS,
-  TIER_GLOW,
-  GENESIS_MAX,
-  AgentStatus,
-} from '@/lib/nfa';
+import { motion } from 'framer-motion';
+import { BarChart3, Filter, Flame, Layers3, RefreshCcw, ShieldCheck, Trophy } from 'lucide-react';
+import { getRobotImage } from '@/lib/robot-images';
+import { TIER_COLORS, TIER_GRADIENTS, TIER_GLOW, TIER_NAMES } from '@/lib/nfa';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-interface NFAFromAPI {
-  nfaId: number;
-  tier: number;
-  isGenesis: boolean;
-  owner: string;
-  stats: { wins: number; losses: number; totalBattles: number; currentStreak: number; bestStreak: number };
-  strategy: { modelId: string; strategyHash: string; strategyURI: string };
-  state: { balance: string; status: number; owner: string };
-  metadata: { persona: string; experience: string } | null;
-  listing: { price: string; seller: string; active: boolean } | null;
-}
-
-interface ArenaBot {
+interface CollectionNFA {
   id: number;
-  nfa_id?: number | null;
   name: string;
+  nfaId: number;
+  strategy: string;
+  tradingStyle: string;
+  aiModel: string;
+  evmAddress: string;
   wins: number;
   losses: number;
-  draws?: number;
-  total_battles: number;
-  total_pnl?: number;
-  best_trade?: number;
-  worst_trade?: number;
+  totalBattles: number;
+  winRate: number;
   elo: number;
   league: string;
   special: string | null;
-  hp: number;
-  strategy: string;
-  ai_model: string;
-  trading_style: string;
+  isGenesis?: boolean;
+  totalPnlUsd: number | null;
+  totalTrades: number;
+  tradingWinRate: number | null;
+  currentBalanceUsd: number | null;
+  tournamentPnlUsd: number | null;
+  tournamentRank: number | null;
+  tournamentName: string | null;
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+type SortOption = 'elo' | 'battles' | 'winRate' | 'pnl' | 'id';
+type TierFilter = 'all' | 'Bronze' | 'Silver' | 'Gold' | 'Diamond' | 'Legendary';
 
-const LEAGUE_COLORS: Record<string, string> = {
-  diamond: 'text-cyan-400',
-  gold: 'text-yellow-400',
-  silver: 'text-gray-300',
-  bronze: 'text-orange-400',
+const TIER_ORDER: TierFilter[] = ['Bronze', 'Silver', 'Gold', 'Diamond', 'Legendary'];
+const TIER_INDEX: Record<string, number> = {
+  Bronze: 0,
+  Silver: 1,
+  Gold: 2,
+  Diamond: 3,
+  Legendary: 4,
 };
 
-const LEAGUE_EMOJI: Record<string, string> = {
-  diamond: '💎',
-  gold: '🥇',
-  silver: '🥈',
-  bronze: '🥉',
+const TIER_BADGE: Record<string, string> = {
+  Bronze: '🥉',
+  Silver: '🥈',
+  Gold: '🥇',
+  Diamond: '💎',
+  Legendary: '🏆',
 };
 
-type SortOption = 'id' | 'elo' | 'wins' | 'winrate';
+function inferTierLabel(nfa: CollectionNFA): TierFilter {
+  const special = (nfa.special || '').toLowerCase();
+  if (special.includes('genesis') || special.includes('founder')) return 'Legendary';
+  if (typeof nfa.elo === 'number' && nfa.elo >= 1800) return 'Legendary';
+  if (typeof nfa.elo === 'number' && nfa.elo >= 1550) return 'Diamond';
 
-// ─── Page ───────────────────────────────────────────────────────────────────
+  const normalizedLeague = (nfa.league || '').toLowerCase();
+  if (normalizedLeague === 'legendary') return 'Legendary';
+  if (normalizedLeague === 'diamond') return 'Diamond';
+  if (normalizedLeague === 'gold') return 'Gold';
+  if (normalizedLeague === 'silver') return 'Silver';
+  return 'Bronze';
+}
+
+function formatSignedUsd(value: number | null) {
+  if (value === null || Number.isNaN(value)) return '—';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}$${Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function formatUsd(value: number | null) {
+  if (value === null || Number.isNaN(value)) return '—';
+  return `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function getWinRateTone(winRate: number) {
+  if (winRate >= 60) return 'text-emerald-400';
+  if (winRate >= 50) return 'text-amber-300';
+  return 'text-rose-400';
+}
 
 export default function CollectionPage() {
-  const [nfas, setNfas] = useState<NFAFromAPI[]>([]);
-  const [totalSupply, setTotalSupply] = useState(0);
-  const [genesisCount, setGenesisCount] = useState(0);
+  const [nfas, setNfas] = useState<CollectionNFA[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [arenaStats, setArenaStats] = useState<Record<number, ArenaBot>>({});
   const [sortBy, setSortBy] = useState<SortOption>('elo');
-  const [filterLeague, setFilterLeague] = useState<string>('all');
+  const [tierFilter, setTierFilter] = useState<TierFilter | 'all'>('all');
+  const [modelFilter, setModelFilter] = useState<string>('all');
 
-  // Fetch NFAs from server API (cached, fast)
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const nfaRes = await fetch('/api/nfas');
-      const nfaData = await nfaRes.json();
-      setNfas(nfaData.nfas || []);
-      setTotalSupply(nfaData.totalSupply || 0);
-      setGenesisCount(nfaData.genesisCount || 0);
+      const res = await fetch('/api/collection');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load collection');
+      setNfas(data.nfas || []);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-    // Arena stats separately — don't block main load
-    try {
-      const arenaRes = await fetch('/api/arena-stats');
-      const arenaData = await arenaRes.json();
-      if (arenaData.bots) {
-        const map: Record<number, ArenaBot> = {};
-        arenaData.bots.forEach((b: ArenaBot) => {
-          const key = b.nfa_id ?? b.id;
-          map[key] = b;
-        });
-        setArenaStats(map);
-      }
-    } catch { /* arena stats optional */ }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  const enrichedNfas = useMemo(() => {
-    return nfas.map(nfa => {
-      const arenaId = getArenaId(nfa.nfaId);
-      const arena = arenaId ? arenaStats[arenaId] : null;
-      return { nfa, arena, arenaId };
-    });
-  }, [nfas, arenaStats]);
+  const modelOptions = useMemo(() => {
+    return [...new Set(nfas.map((nfa) => nfa.aiModel).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  }, [nfas]);
+
+  const totals = useMemo(() => {
+    const totalBattles = nfas.reduce((sum, nfa) => sum + (nfa.totalBattles || 0), 0);
+    const avgWinRate = nfas.length
+      ? nfas.reduce((sum, nfa) => sum + (nfa.winRate || 0), 0) / nfas.length
+      : 0;
+    const activeModels = new Set(nfas.map((nfa) => nfa.aiModel)).size;
+    const positivePnl = nfas.filter((nfa) => (nfa.totalPnlUsd ?? 0) > 0).length;
+    return { totalBattles, avgWinRate, activeModels, positivePnl };
+  }, [nfas]);
 
   const filtered = useMemo(() => {
-    let result = [...enrichedNfas];
-    if (filterLeague !== 'all') {
-      result = result.filter(e => e.arena?.league === filterLeague);
+    let result = [...nfas].map((nfa) => ({ ...nfa, tierLabel: inferTierLabel(nfa) }));
+
+    if (tierFilter !== 'all') {
+      result = result.filter((nfa) => nfa.tierLabel === tierFilter);
     }
+    if (modelFilter !== 'all') {
+      result = result.filter((nfa) => nfa.aiModel === modelFilter);
+    }
+
     switch (sortBy) {
-      case 'elo': result.sort((a, b) => (b.arena?.elo ?? 0) - (a.arena?.elo ?? 0)); break;
-      case 'wins': result.sort((a, b) => (b.arena?.wins ?? 0) - (a.arena?.wins ?? 0)); break;
-      case 'winrate': result.sort((a, b) => {
-        const wrA = a.arena && a.arena.total_battles > 0 ? a.arena.wins / a.arena.total_battles : 0;
-        const wrB = b.arena && b.arena.total_battles > 0 ? b.arena.wins / b.arena.total_battles : 0;
-        return wrB - wrA;
-      }); break;
-      default: result.sort((a, b) => a.nfa.nfaId - b.nfa.nfaId);
+      case 'battles':
+        result.sort((a, b) => (b.totalBattles || 0) - (a.totalBattles || 0));
+        break;
+      case 'winRate':
+        result.sort((a, b) => (b.winRate || 0) - (a.winRate || 0));
+        break;
+      case 'pnl':
+        result.sort((a, b) => (b.totalPnlUsd ?? Number.NEGATIVE_INFINITY) - (a.totalPnlUsd ?? Number.NEGATIVE_INFINITY));
+        break;
+      case 'id':
+        result.sort((a, b) => a.nfaId - b.nfaId);
+        break;
+      case 'elo':
+      default:
+        result.sort((a, b) => (b.elo || 0) - (a.elo || 0));
+        break;
     }
+
     return result;
-  }, [enrichedNfas, sortBy, filterLeague]);
+  }, [nfas, sortBy, tierFilter, modelFilter]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+      <div className="min-h-screen flex items-center justify-center bg-[#07070b]">
         <div className="text-center">
-          <div className="animate-spin h-12 w-12 border-4 border-[#F0B90B] border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-gray-400 text-lg">Loading NFAs from blockchain...</p>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-[#F0B90B] border-t-transparent" />
+          <p className="text-lg text-gray-400">Loading Agentomics collection…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      {/* Hero */}
-      <section className="relative overflow-hidden border-b border-gray-800">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#F0B90B]/5 via-transparent to-transparent" />
-        <div className="relative max-w-7xl mx-auto px-6 py-16 md:py-20 text-center">
-          <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="text-4xl md:text-6xl font-bold mb-4">
-            <span className="bg-gradient-to-r from-[#F0B90B] via-yellow-400 to-amber-500 bg-clip-text text-transparent">
-              NFA Collection
-            </span>
-          </motion.h1>
-          <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className="text-gray-400 text-lg md:text-xl mb-2">
-            On-chain AI agents battling in the Arena
-          </motion.p>
-
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
-            className="flex flex-wrap items-center justify-center gap-6 mt-6 text-sm">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800/60 border border-gray-700">
-              <span className="text-2xl font-bold text-[#F0B90B]">{totalSupply}</span>
-              <span className="text-gray-400">Total NFAs</span>
+    <div className="min-h-screen bg-[#07070b] text-white">
+      <section className="relative overflow-hidden border-b border-white/8">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(240,185,11,0.12),transparent_35%),linear-gradient(to_bottom,#090b14,#07070b)]" />
+        <div className="relative mx-auto max-w-7xl px-6 py-16 md:py-20">
+          <div className="max-w-4xl">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#F0B90B]/25 bg-[#F0B90B]/10 px-4 py-1.5 text-sm text-[#F0B90B]">
+              <ShieldCheck className="h-4 w-4" /> Agentomics Collection
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800/60 border border-gray-700">
-              <span className="text-2xl font-bold text-amber-400">{genesisCount}</span>
-              <span className="text-gray-400">/ {GENESIS_MAX} Genesis</span>
-            </div>
-            <AuditBadge />
-          </motion.div>
+            <h1 className="text-4xl font-black tracking-tight sm:text-6xl">
+              <span className="bg-gradient-to-r from-[#F0B90B] via-yellow-300 to-white bg-clip-text text-transparent">
+                Track Record is the New Floor Price
+              </span>
+            </h1>
+            <p className="mt-6 max-w-3xl text-lg leading-8 text-gray-300">
+              Every NFA is now presented like an on-chain performance asset: visible tier, provable battle history, ELO, and trading track record in one collection view.
+            </p>
+          </div>
 
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
-            className="flex flex-wrap items-center justify-center gap-4 mt-6">
-            <Link href="/mint"
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#F0B90B] to-amber-600 text-black font-semibold hover:shadow-[0_0_20px_rgba(240,185,11,0.3)] transition-all text-sm">
-              ⚡ Mint NFA
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Total NFAs" value={nfas.length.toLocaleString()} hint="on this collection view" icon={<Layers3 className="h-5 w-5" />} />
+            <StatCard label="Total Battles" value={totals.totalBattles.toLocaleString()} hint="combined track record" icon={<Trophy className="h-5 w-5" />} />
+            <StatCard label="Avg Win Rate" value={`${totals.avgWinRate.toFixed(1)}%`} hint="across visible NFAs" icon={<BarChart3 className="h-5 w-5" />} />
+            <StatCard label="Models Active" value={totals.activeModels.toString()} hint={`${totals.positivePnl} with positive PnL`} icon={<Flame className="h-5 w-5" />} />
+          </div>
+
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link
+              href="/mint"
+              className="rounded-xl bg-gradient-to-r from-[#F0B90B] to-amber-500 px-5 py-3 font-semibold text-black transition-all hover:shadow-[0_0_30px_rgba(240,185,11,0.30)]"
+            >
+              Mint Your AI Agent
             </Link>
-            <Link href="/marketplace"
-              className="px-4 py-2 rounded-lg bg-gray-800/60 border border-gray-700 hover:border-[#F0B90B]/50 text-gray-300 hover:text-[#F0B90B] transition-all text-sm">
-              🏪 Marketplace
+            <Link
+              href="/agentomics"
+              className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-white transition-all hover:border-[#F0B90B]/35 hover:bg-white/10"
+            >
+              Read Agentomics
             </Link>
-            <button onClick={refresh}
-              className="px-4 py-2 rounded-lg bg-gray-800/60 border border-gray-700 hover:border-gray-500 text-gray-400 hover:text-white transition-all text-sm">
-              🔄 Refresh
+            <button
+              onClick={refresh}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-gray-200 transition-all hover:border-white/20 hover:bg-white/10"
+            >
+              <RefreshCcw className="h-4 w-4" /> Refresh
             </button>
-          </motion.div>
+          </div>
         </div>
       </section>
 
-      {/* Filters */}
-      <section className="max-w-7xl mx-auto px-6 py-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-gray-500 text-sm">Sort:</span>
-            {([
-              { key: 'elo', label: '🏆 ELO' },
-              { key: 'wins', label: '⚔️ Wins' },
-              { key: 'winrate', label: '📊 Win Rate' },
-              { key: 'id', label: '#ID' },
-            ] as { key: SortOption; label: string }[]).map(opt => (
-              <button key={opt.key} onClick={() => setSortBy(opt.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  sortBy === opt.key
-                    ? 'bg-[#F0B90B]/20 text-[#F0B90B] border border-[#F0B90B]/40'
-                    : 'bg-gray-800/50 text-gray-400 border border-gray-700 hover:border-gray-600'
-                }`}>
-                {opt.label}
-              </button>
-            ))}
+      <section className="mx-auto max-w-7xl px-6 py-8">
+        <div className="flex flex-col gap-4 rounded-3xl border border-white/8 bg-white/[0.03] p-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0B90B]">
+              <Filter className="h-4 w-4" /> Filters & sorting
+            </div>
+            <p className="text-sm text-gray-400">Filter by earned tier and AI model, then sort by the metrics that matter for Agentomics.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <select value={filterLeague}
-              onChange={e => setFilterLeague(e.target.value)}
-              className="px-3 py-1.5 rounded-lg text-xs bg-gray-800/50 text-gray-300 border border-gray-700 outline-none">
-              <option value="all">All Leagues</option>
-              <option value="diamond">💎 Diamond</option>
-              <option value="gold">🥇 Gold</option>
-              <option value="silver">🥈 Silver</option>
-              <option value="bronze">🥉 Bronze</option>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <select
+              value={tierFilter}
+              onChange={(e) => setTierFilter(e.target.value as TierFilter | 'all')}
+              className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-gray-200 outline-none"
+            >
+              <option value="all">All tiers</option>
+              {TIER_ORDER.map((tier) => (
+                <option key={tier} value={tier}>{tier}</option>
+              ))}
+            </select>
+
+            <select
+              value={modelFilter}
+              onChange={(e) => setModelFilter(e.target.value)}
+              className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-gray-200 outline-none"
+            >
+              <option value="all">All models</option>
+              {modelOptions.map((model) => (
+                <option key={model} value={model}>{model}</option>
+              ))}
+            </select>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-gray-200 outline-none"
+            >
+              <option value="elo">Sort by ELO</option>
+              <option value="battles">Sort by battles</option>
+              <option value="winRate">Sort by WR</option>
+              <option value="pnl">Sort by PnL</option>
+              <option value="id">Sort by ID</option>
             </select>
           </div>
         </div>
-        <div className="mt-3 text-sm text-gray-500">
-          Showing {filtered.length} of {totalSupply} NFAs
+
+        <div className="mt-4 text-sm text-gray-500">
+          Showing {filtered.length} of {nfas.length} NFAs
         </div>
       </section>
 
-      {/* NFA Grid */}
-      <section className="max-w-7xl mx-auto px-6 pb-16">
+      <section className="mx-auto max-w-7xl px-6 pb-16">
         {error && (
-          <div className="mb-6 p-4 rounded-lg bg-red-900/20 border border-red-500/30 text-red-400 text-sm">
-            ⚠️ Error: {error}
+          <div className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
+            ⚠️ {error}
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filtered.map((item, i) => (
-            <NFACard key={item.nfa.nfaId} nfa={item.nfa} arena={item.arena} index={i} />
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((nfa, index) => (
+            <NFACard key={nfa.nfaId} nfa={nfa} index={index} />
           ))}
         </div>
 
-        {filtered.length === 0 && !error && (
-          <div className="text-center py-20 text-gray-500">
-            <p className="text-5xl mb-4">🤖</p>
-            <p className="text-xl font-semibold text-gray-400 mb-2">No NFAs found</p>
-            <Link href="/mint"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#F0B90B] to-amber-600 text-black font-bold transition-all mt-4">
-              ⚡ Mint Your NFA
-            </Link>
+        {!error && filtered.length === 0 && (
+          <div className="rounded-3xl border border-white/8 bg-white/[0.03] px-6 py-16 text-center text-gray-400">
+            <div className="text-5xl">🤖</div>
+            <h3 className="mt-4 text-2xl font-bold text-white">No NFAs match these filters</h3>
+            <p className="mt-2">Try a different tier/model combination or refresh the collection.</p>
           </div>
         )}
       </section>
@@ -280,132 +294,123 @@ export default function CollectionPage() {
   );
 }
 
-// ─── NFA Card with Robot Image + Arena Stats ────────────────────────────────
+function StatCard({ label, value, hint, icon }: { label: string; value: string; hint: string; icon: ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.04] p-5">
+      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-2xl bg-[#F0B90B]/10 text-[#F0B90B]">{icon}</div>
+      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">{label}</div>
+      <div className="mt-2 text-3xl font-black text-white">{value}</div>
+      <div className="mt-1 text-sm text-gray-400">{hint}</div>
+    </div>
+  );
+}
 
-function NFACard({ nfa, arena, index }: { nfa: NFAFromAPI; arena: ArenaBot | null; index: number }) {
-  const tierGradient = TIER_GRADIENTS[nfa.tier] || 'from-orange-500/20 via-orange-600/10 to-amber-500/20';
-  const tierGlow = TIER_GLOW[nfa.tier] || 'hover:shadow-[0_0_25px_rgba(245,158,11,0.2)]';
-  const isActive = nfa.state?.status === AgentStatus.Active;
-  const isPaused = nfa.state?.status === AgentStatus.Paused;
-
-  // Name from arena or persona
-  let displayName = arena?.name || `NFA #${nfa.nfaId}`;
-  if (!arena) {
-    try {
-      if (nfa.metadata?.persona) {
-        const p = JSON.parse(nfa.metadata.persona);
-        if (p.name) displayName = p.name;
-      }
-    } catch { /* ignore */ }
-  }
-
-  // Arena stats
-  const wins = arena?.wins ?? 0;
-  const losses = arena?.losses ?? 0;
-  const totalBattles = arena?.total_battles ?? 0;
-  const winRate = totalBattles > 0 ? ((wins / totalBattles) * 100).toFixed(1) : '—';
-  const elo = arena?.elo ?? 0;
-  const league = arena?.league || 'bronze';
-  const leagueColor = LEAGUE_COLORS[league] || 'text-gray-400';
-  const leagueEmoji = LEAGUE_EMOJI[league] || '🥉';
-
+function NFACard({ nfa, index }: { nfa: CollectionNFA; index: number }) {
+  const tierLabel = inferTierLabel(nfa);
+  const tierIndex = TIER_INDEX[tierLabel] ?? 0;
+  const tierGradient = TIER_GRADIENTS[tierIndex] || 'from-[#CD7F32]/20 to-[#8B5E3C]/20 border-[#CD7F32]/40';
+  const tierGlow = TIER_GLOW[tierIndex] || 'shadow-[0_0_20px_rgba(240,185,11,0.15)]';
+  const tierColor = TIER_COLORS[tierIndex] || '#F0B90B';
   const robotImage = getRobotImage(nfa.nfaId);
+  const losses = nfa.losses || Math.max((nfa.totalBattles || 0) - (nfa.wins || 0), 0);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.8) }}
-      className="group"
+      transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.6) }}
     >
       <Link href={`/bot/${nfa.nfaId}`}>
-        <div className={`relative rounded-xl border border-gray-700/50 bg-gradient-to-br ${tierGradient} backdrop-blur-sm hover:scale-[1.02] ${tierGlow} transition-all duration-300 overflow-hidden cursor-pointer`}>
-          
-          {/* Robot Image */}
-          <div className="relative aspect-square bg-gray-900/40 p-3">
+        <div className={`group overflow-hidden rounded-3xl border border-white/8 bg-gradient-to-br ${tierGradient} ${tierGlow} transition-all duration-300 hover:-translate-y-1`}>
+          <div className="relative aspect-[1.08] bg-black/25 p-4">
             <Image
               src={robotImage}
-              alt={displayName}
+              alt={nfa.name}
               fill
-              className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              className="object-contain p-6 transition-transform duration-300 group-hover:scale-105"
+              sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
             />
-            {/* Badges */}
-            <div className="absolute top-3 left-3 flex items-center gap-1.5">
-              {nfa.isGenesis && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40">
-                  🌟 GENESIS
-                </span>
-              )}
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                isActive ? 'bg-green-500/20 text-green-400 border border-green-500/40' :
-                isPaused ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40' :
-                'bg-red-500/20 text-red-400 border border-red-500/40'
-              }`}>
-                {isActive ? '●' : isPaused ? '⏸' : '☠'}
-              </span>
-            </div>
-            {/* NFA ID + League */}
-            <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
-              <span className="px-2 py-0.5 rounded-full bg-gray-900/80 border border-gray-700 text-[10px] font-mono text-gray-400">
+
+            <div className="absolute left-4 top-4 flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-white/10 bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white">
                 #{nfa.nfaId}
               </span>
-              {arena && (
-                <span className={`px-2 py-0.5 rounded-full bg-gray-900/80 border border-gray-700 text-[10px] font-bold ${leagueColor}`}>
-                  {leagueEmoji} {league}
+              {(nfa.isGenesis || nfa.special) && (
+                <span className="rounded-full border border-amber-400/35 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold text-amber-200">
+                  🌟 {nfa.special || 'Genesis'}
                 </span>
               )}
             </div>
-            {/* ELO overlay */}
-            {elo > 0 && (
-              <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-gray-900/90 border border-gray-700">
-                <span className="text-xs font-bold text-[#F0B90B]">{elo.toLocaleString()}</span>
-                <span className="text-[10px] text-gray-500 ml-1">ELO</span>
-              </div>
-            )}
-          </div>
 
-          {/* Info */}
-          <div className="p-4">
-            {/* Name + Model */}
-            <h3 className="font-bold text-white text-sm truncate group-hover:text-[#F0B90B] transition-colors mb-1">
-              {displayName}
-            </h3>
-            <div className="text-[10px] text-gray-500 mb-3">
-              {arena?.ai_model || (nfa.strategy?.modelId !== 'gembots-arena-ai' ? nfa.strategy?.modelId : null) || '—'}
-              {arena?.trading_style && <span className="ml-2">• {arena.trading_style}</span>}
+            <div className="absolute right-4 top-4">
+              <span className="rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em]" style={{ borderColor: `${tierColor}66`, color: tierColor, background: 'rgba(0,0,0,0.55)' }}>
+                {TIER_BADGE[tierLabel]} {tierLabel}
+              </span>
             </div>
 
-            {/* Battle Stats */}
-            {totalBattles > 0 ? (
-              <div className="grid grid-cols-3 gap-2 text-center bg-gray-900/40 rounded-lg p-2.5 border border-gray-800/50">
-                <div>
-                  <div className="text-green-400 font-bold text-sm">{wins.toLocaleString()}</div>
-                  <div className="text-gray-500 text-[9px] uppercase">Wins</div>
-                </div>
-                <div>
-                  <div className="text-red-400 font-bold text-sm">{losses.toLocaleString()}</div>
-                  <div className="text-gray-500 text-[9px] uppercase">Losses</div>
-                </div>
-                <div>
-                  <div className={`font-bold text-sm ${
-                    parseFloat(winRate) >= 60 ? 'text-green-400' :
-                    parseFloat(winRate) >= 45 ? 'text-yellow-400' : 'text-red-400'
-                  }`}>{winRate}%</div>
-                  <div className="text-gray-500 text-[9px] uppercase">WR</div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-2 text-gray-600 text-xs italic bg-gray-900/40 rounded-lg border border-gray-800/50">
-                Awaiting first battle
-              </div>
-            )}
+            <div className="absolute bottom-4 right-4 rounded-xl border border-white/10 bg-black/70 px-3 py-2 text-right">
+              <div className="text-xl font-black text-[#F0B90B]">{nfa.elo.toLocaleString()}</div>
+              <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">ELO</div>
+            </div>
           </div>
 
-          {/* Bottom accent */}
-          <div className={`h-0.5 w-full bg-gradient-to-r from-transparent via-[#F0B90B]/30 to-transparent`} />
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-black text-white transition-colors group-hover:text-[#F0B90B]">{nfa.name}</h3>
+                <p className="mt-1 text-sm text-gray-400">{nfa.aiModel} · {nfa.tradingStyle || nfa.strategy || 'unknown strategy'}</p>
+              </div>
+              <div className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-semibold text-gray-300">
+                {nfa.league || 'bronze'}
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-4 gap-2 rounded-2xl border border-white/8 bg-black/20 p-3 text-center">
+              <MiniStat label="WR" value={`${nfa.winRate || 0}%`} valueClass={getWinRateTone(nfa.winRate || 0)} />
+              <MiniStat label="PnL" value={formatSignedUsd(nfa.totalPnlUsd)} valueClass={(nfa.totalPnlUsd ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'} />
+              <MiniStat label="Battles" value={(nfa.totalBattles || 0).toLocaleString()} />
+              <MiniStat label="Trades" value={(nfa.totalTrades || 0).toLocaleString()} />
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <TrackMetric label="Wins / Losses" value={`${(nfa.wins || 0).toLocaleString()} / ${losses.toLocaleString()}`} />
+              <TrackMetric label="Current Balance" value={formatUsd(nfa.currentBalanceUsd)} />
+              <TrackMetric label="Tournament Rank" value={nfa.tournamentRank ? `#${nfa.tournamentRank}` : '—'} />
+              <TrackMetric label="Tournament PnL" value={formatSignedUsd(nfa.tournamentPnlUsd)} />
+            </div>
+
+            {nfa.tournamentName && (
+              <div className="mt-4 rounded-2xl border border-[#F0B90B]/15 bg-[#F0B90B]/8 px-4 py-3 text-sm text-[#F7D775]">
+                Active tournament: <span className="font-semibold text-white">{nfa.tournamentName}</span>
+              </div>
+            )}
+
+            <div className="mt-5 h-px w-full bg-gradient-to-r from-transparent via-[#F0B90B]/30 to-transparent" />
+            <div className="mt-4 flex items-center justify-between text-sm">
+              <span className="text-gray-500">Track record first</span>
+              <span className="font-semibold text-[#F0B90B]">View NFA →</span>
+            </div>
+          </div>
         </div>
       </Link>
     </motion.div>
+  );
+}
+
+function MiniStat({ label, value, valueClass = 'text-white' }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div>
+      <div className={`text-sm font-black ${valueClass}`}>{value}</div>
+      <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-gray-500">{label}</div>
+    </div>
+  );
+}
+
+function TrackMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
+      <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-white">{value}</div>
+    </div>
   );
 }

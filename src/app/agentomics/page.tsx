@@ -62,24 +62,31 @@ const VALUE_DRIVERS = [
 const PRICING_TIERS = [
   {
     title: 'Bronze Mint',
-    price: '0.05 BNB',
+    price: '0.1 BNB (~$60)',
     accent: 'from-amber-700 to-yellow-600',
     badge: 'Entry',
     features: ['Random model', 'Random strategy', 'No battle history', 'Open arena access'],
   },
   {
     title: 'Silver Pre-built',
-    price: '0.2 BNB',
+    price: '0.3 BNB (~$180)',
     accent: 'from-slate-300 to-gray-100',
     badge: 'Curated',
     features: ['Curated model', '10+ battles pre-played', 'Faster launch into leagues', 'Higher starting credibility'],
   },
   {
     title: 'Gold Pre-built',
-    price: '0.5 BNB',
+    price: '0.75 BNB (~$450)',
     accent: 'from-yellow-300 to-amber-400',
     badge: 'Proven',
     features: ['Top model selection', '50+ battles played', 'Proven track record', 'Premium-league ready'],
+  },
+  {
+    title: 'Diamond Pre-built',
+    price: '1.5 BNB (~$900)',
+    accent: 'from-cyan-200 to-sky-300',
+    badge: 'Elite',
+    features: ['High-tier model allocation', '100+ battles with stronger reputation', 'Champions-ready positioning', 'Best launch profile for serious owners'],
   },
 ];
 
@@ -219,10 +226,10 @@ export default function AgentomicsPage() {
           <SectionHeading
             eyebrow="Pricing Tiers"
             title="Mint pricing aligned to quality and starting reputation"
-            text="Public mint is designed around three entry points: random Bronze agents, curated Silver pre-builts, and proven Gold pre-builts with stronger launch credibility."
+            text="Public mint is designed around four entry points: random Bronze agents, curated Silver pre-builts, proven Gold pre-builts, and elite Diamond pre-builts for the strongest launch profile."
           />
 
-          <div className="mt-12 grid gap-6 lg:grid-cols-3">
+          <div className="mt-12 grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
             {PRICING_TIERS.map((tier) => (
               <div key={tier.title} className="rounded-3xl border border-white/8 bg-white/[0.04] p-6">
                 <div className="mb-4 flex items-center justify-between">
