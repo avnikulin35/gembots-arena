@@ -118,12 +118,13 @@ export default function CollectionPage() {
   }, [nfas]);
 
   const totals = useMemo(() => {
-    const totalBattles = nfas.reduce((sum, nfa) => sum + (nfa.totalBattles || 0), 0);
+    const nonGenesisNfas = nfas.filter((nfa) => !nfa.isGenesis && !(nfa.special || '').toLowerCase().includes('genesis') && !(nfa.special || '').toLowerCase().includes('founder'));
+    const totalBattles = nonGenesisNfas.reduce((sum, nfa) => sum + (nfa.wins || 0), 0);
     const avgWinRate = nfas.length
       ? nfas.reduce((sum, nfa) => sum + (nfa.winRate || 0), 0) / nfas.length
       : 0;
-    const activeModels = new Set(nfas.map((nfa) => nfa.aiModel)).size;
-    const positivePnl = nfas.filter((nfa) => (nfa.totalPnlUsd ?? 0) > 0).length;
+    const activeModels = new Set(nfas.map((nfa) => nfa.aiModel).filter(Boolean)).size;
+    const positivePnl = nonGenesisNfas.filter((nfa) => typeof nfa.totalPnlUsd === 'number' && nfa.totalPnlUsd > 0).length;
     return { totalBattles, avgWinRate, activeModels, positivePnl };
   }, [nfas]);
 

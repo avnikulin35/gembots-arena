@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import Database from 'better-sqlite3';
+import path from 'path';
 import { getModelDisplayName } from '@/lib/model-display';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +14,7 @@ function getSupabase() {
 }
 
 const NFA_CONTRACT = process.env.NEXT_PUBLIC_BSC_NFA_CONTRACT_ADDRESS || '0x9bC5f392cE8C7aA13BD5bC7D5A1A12A4DD58b3D5';
+const SQLITE_DB_PATH = path.join(process.cwd(), 'data/gembots.db');
 
 // Genesis NFAs that aren't in the bots table
 const GENESIS_NFAS = [
@@ -63,26 +66,51 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch collection' }, { status: 500 });
     }
 
-    // Fetch trading stats for all NFAs
-    const nfaIds = (bots || []).map((b) => b.nfa_id).filter(Boolean);
+    // Fetch trading stats from SQLite (source of truth for live trading data)
+    const nfaIds = (bots || []).map((b) => Number(b.nfa_id)).filter((v) => Number.isFinite(v));
     let statsMap = new Map<number, {
       total_pnl_usd: number;
       total_trades: number;
       win_rate: number;
-      paper_balance_usd: number;
+      paper_balance_usd: number | null;
     }>();
 
-    if (nfaIds.length > 0) {
-      const { data: stats } = await supabase
-        .from('nfa_trading_stats')
-        .select('nfa_id, total_pnl_usd, total_trades, win_rate, paper_balance_usd')
-        .in('nfa_id', nfaIds);
+    let sqliteDb: Database.Database | null = null;
+    try {
+      sqliteDb = new Database(SQLITE_DB_PATH, { readonly: true });
+      const tradingRows = sqliteDb.prepare(`
+        SELECT
+          ab.nfa_id,
+          te.total_pnl AS total_pnl_usd,
+          te.total_trades,
+          CASE WHEN te.total_trades > 0 THEN (te.wins * 100.0 / te.total_trades) ELSE 0 END AS win_rate,
+          tp.balance AS paper_balance_usd
+        FROM api_bots ab
+        LEFT JOIN trading_elo te ON te.bot_id = ab.id
+        LEFT JOIN trading_portfolio tp ON tp.bot_id = ab.id
+        WHERE ab.nfa_id IS NOT NULL
+      `).all() as Array<{
+        nfa_id: number | string;
+        total_pnl_usd: number | null;
+        total_trades: number | null;
+        win_rate: number | null;
+        paper_balance_usd: number | null;
+      }>;
 
-      if (stats) {
-        for (const s of stats) {
-          statsMap.set(s.nfa_id, s);
-        }
+      for (const row of tradingRows) {
+        const nfaId = Number(row.nfa_id);
+        if (!Number.isFinite(nfaId)) continue;
+        statsMap.set(nfaId, {
+          total_pnl_usd: Number(row.total_pnl_usd) || 0,
+          total_trades: Number(row.total_trades) || 0,
+          win_rate: Number(row.win_rate) || 0,
+          paper_balance_usd: row.paper_balance_usd == null ? null : Number(row.paper_balance_usd),
+        });
       }
+    } catch (sqliteError) {
+      console.error('Collection SQLite trading stats error:', sqliteError);
+    } finally {
+      sqliteDb?.close();
     }
 
     // Fetch current active tournament
@@ -136,8 +164,9 @@ export async function GET() {
         ? Math.round(((bot.wins || 0) / totalBattles) * 100)
         : 0;
 
-      const tradingStats = statsMap.get(bot.nfa_id) || null;
-      const tournamentEntry = tournamentMap.get(bot.nfa_id) || null;
+      const numericNfaId = Number(bot.nfa_id);
+      const tradingStats = statsMap.get(numericNfaId) || null;
+      const tournamentEntry = tournamentMap.get(numericNfaId) || null;
 
       return {
         id: bot.id,
