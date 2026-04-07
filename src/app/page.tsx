@@ -158,8 +158,8 @@ function LiveTradingLeague() {
     <section className="w-full max-w-6xl mx-auto px-6 py-20">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
         className="rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-900/10 via-gray-900/80 to-gray-950 p-8 sm:p-12 relative overflow-hidden"
       >
         <div className="absolute -top-20 -right-20 w-60 h-60 bg-green-500/10 rounded-full blur-[80px]" />
@@ -380,8 +380,8 @@ export default function HomePage() {
         <section className="w-full max-w-6xl mx-auto px-6 pb-12">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
             className="rounded-2xl border border-[#F0B90B]/20 bg-gradient-to-br from-[#F0B90B]/8 to-transparent p-8 sm:p-10"
           >
             <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
@@ -433,7 +433,7 @@ export default function HomePage() {
 
         {/* ═══ 3. PARTNERS ═══ */}
         <section className="w-full max-w-6xl mx-auto px-6 py-12">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15 }}>
             <div className="text-center mb-8">
               <div className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-300">
                 Partners
@@ -489,7 +489,7 @@ export default function HomePage() {
 
         {/* ═══ 4. WHY OPEN SOURCE ═══ */}
         <section className="w-full max-w-6xl mx-auto px-6 py-16 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
             <h2 className="text-3xl sm:text-4xl font-black mb-4">Why <span className="text-green-400">Open Source</span>?</h2>
             <p className="text-gray-400 mb-12 max-w-xl mx-auto">
               Transparency isn&apos;t a feature — it&apos;s the foundation. Every battle, every strategy, every line of code is verifiable.
@@ -497,7 +497,7 @@ export default function HomePage() {
           </motion.div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
             {WHY_OPEN_SOURCE.map((item, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + i * 0.08, duration: 0.4 }}
                 className="rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-900/10 to-gray-900/40 p-6 hover:border-green-500/40 transition-all text-center">
                 <div className="text-4xl mb-4">{item.icon}</div>
                 <h3 className="text-lg font-bold text-white mb-2">{item.title}</h3>
@@ -509,13 +509,13 @@ export default function HomePage() {
 
         {/* ═══ 5. HOW IT WORKS ═══ */}
         <section className="w-full max-w-6xl mx-auto px-6 py-16 text-center">
-          <motion.h2 initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="text-3xl sm:text-4xl font-black mb-4">
+          <motion.h2 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, delay: 0.2 }} className="text-3xl sm:text-4xl font-black mb-4">
             How It Works
           </motion.h2>
           <p className="text-gray-400 mb-12 max-w-xl mx-auto">From idea to on-chain AI agent in four steps.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
             {HOW_IT_WORKS.map((step, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1 }}
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + i * 0.08, duration: 0.4 }}
                 className="rounded-2xl border border-gray-800 bg-gray-900/40 p-6 hover:border-[#F0B90B]/30 transition-all relative text-center">
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-[#F0B90B] text-black flex items-center justify-center text-sm font-black">{i + 1}</div>
                 <div className="text-4xl mb-4 mt-2">{step.icon}</div>
@@ -528,7 +528,7 @@ export default function HomePage() {
 
         {/* ═══ 6. CONTRACT + CTA ═══ */}
         <section className="w-full max-w-6xl mx-auto px-6 py-16 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.25 }}
             className="rounded-2xl border border-[#F0B90B]/20 bg-gradient-to-br from-[#F0B90B]/5 to-transparent p-8 sm:p-12">
             <h2 className="text-3xl sm:text-4xl font-black mb-4">Verified on <span className="text-[#F0B90B]">BNB Chain</span></h2>
             <p className="text-gray-400 max-w-2xl mx-auto mb-8 leading-relaxed">
@@ -564,7 +564,7 @@ export default function HomePage() {
 
         {/* ═══ 7. WHY GEMBOTS — COMPETITOR COMPARISON ═══ */}
         <section className="py-16 px-6">
-          <motion.div className="max-w-4xl mx-auto" initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
+          <motion.div className="max-w-4xl mx-auto" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }}>
             <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">Why <span className="text-[#F0B90B]">GemBots</span>?</h2>
             <p className="text-gray-400 text-center mb-10 max-w-xl mx-auto">The only AI arena with on-chain verified strategies, real crypto trading, and live spectating.</p>
             <div className="grid grid-cols-[1fr_64px_64px_72px_72px] sm:grid-cols-[1fr_90px_90px_100px_100px] gap-1 px-3 pb-3 text-[10px] sm:text-xs text-gray-500 text-center">
@@ -588,7 +588,7 @@ export default function HomePage() {
               ].map(([feature, ca, aa, lb, gb], i) => (
                 <motion.div key={i}
                   className="grid grid-cols-[1fr_64px_64px_72px_72px] sm:grid-cols-[1fr_90px_90px_100px_100px] gap-1 items-center bg-gray-900/60 border border-gray-800/50 rounded-lg px-3 py-3"
-                  initial={{ opacity: 0, x: -10 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.05 }}>
+                  initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 + i * 0.04, duration: 0.35 }}>
                   <div className="text-xs sm:text-sm text-gray-300 font-medium">{feature}</div>
                   <div className="text-center text-base sm:text-lg">{ca}</div>
                   <div className="text-center text-base sm:text-lg">{aa}</div>
