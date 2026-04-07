@@ -92,6 +92,7 @@ export default function CollectionPage() {
   const [sortBy, setSortBy] = useState<SortOption>('elo');
   const [tierFilter, setTierFilter] = useState<TierFilter | 'all'>('all');
   const [modelFilter, setModelFilter] = useState<string>('all');
+  const [wrFilter, setWrFilter] = useState<string>('all');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -135,6 +136,13 @@ export default function CollectionPage() {
     if (modelFilter !== 'all') {
       result = result.filter((nfa) => nfa.aiModel === modelFilter);
     }
+    if (wrFilter === '60+') {
+      result = result.filter((nfa) => (nfa.winRate || 0) >= 60);
+    } else if (wrFilter === '50-59') {
+      result = result.filter((nfa) => (nfa.winRate || 0) >= 50 && (nfa.winRate || 0) < 60);
+    } else if (wrFilter === 'under-50') {
+      result = result.filter((nfa) => (nfa.winRate || 0) < 50);
+    }
 
     switch (sortBy) {
       case 'battles':
@@ -156,7 +164,7 @@ export default function CollectionPage() {
     }
 
     return result;
-  }, [nfas, sortBy, tierFilter, modelFilter]);
+  }, [nfas, sortBy, tierFilter, modelFilter, wrFilter]);
 
   if (loading) {
     return (
@@ -227,7 +235,7 @@ export default function CollectionPage() {
             <p className="text-sm text-gray-400">Filter by earned tier and AI model, then sort by the metrics that matter for Agentomics.</p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <select
               value={tierFilter}
               onChange={(e) => setTierFilter(e.target.value as TierFilter | 'all')}
@@ -248,6 +256,17 @@ export default function CollectionPage() {
               {modelOptions.map((model) => (
                 <option key={model} value={model}>{model}</option>
               ))}
+            </select>
+
+            <select
+              value={wrFilter}
+              onChange={(e) => setWrFilter(e.target.value)}
+              className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-gray-200 outline-none"
+            >
+              <option value="all">All WR bands</option>
+              <option value="60+">WR 60%+</option>
+              <option value="50-59">WR 50–59%</option>
+              <option value="under-50">WR under 50%</option>
             </select>
 
             <select
