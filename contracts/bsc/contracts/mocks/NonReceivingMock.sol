@@ -1,27 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-interface IGenesisVaultClaim {
+interface IGenesisVaultForMock {
     function claim(uint256 tokenId) external;
     function claimPendingPayment() external;
 }
 
 contract NonReceivingMock {
-    bool public rejectPayments = true;
+    bool public acceptPayments;
 
-    function setRejectPayments(bool shouldReject) external {
-        rejectPayments = shouldReject;
+    function claimFromVault(address vault, uint256 tokenId) external {
+        IGenesisVaultForMock(vault).claim(tokenId);
     }
 
-    function claim(address vault, uint256 tokenId) external {
-        IGenesisVaultClaim(vault).claim(tokenId);
+    function claimPendingFromVault(address vault) external {
+        IGenesisVaultForMock(vault).claimPendingPayment();
     }
 
-    function claimPending(address vault) external {
-        IGenesisVaultClaim(vault).claimPendingPayment();
+    function setAcceptPayments(bool value) external {
+        acceptPayments = value;
     }
 
     receive() external payable {
-        require(!rejectPayments, 'Rejecting payment');
+        require(acceptPayments, "No direct payments");
     }
 }
