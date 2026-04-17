@@ -13,6 +13,8 @@ interface TradingEloData {
   best_trade: number;
   worst_trade: number;
   name: string;
+  current_streak?: number;
+  best_streak?: number;
 }
 
 interface TradingPortfolioData {
@@ -128,6 +130,11 @@ export default function LeaderboardPage() {
           </p>
         </section>
 
+        {/* Weekly Champions */}
+        {!loading && tradingData && tradingData.leaderboard?.length >= 3 && (
+          <WeeklyChampions bots={tradingData.leaderboard.slice(0, 3)} />
+        )}
+
         {/* Tabs */}
         <div className="flex gap-2 mb-8">
           <button
@@ -165,7 +172,7 @@ export default function LeaderboardPage() {
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
             <div className="flex items-center gap-3">
               <span className="text-xl">💎</span>
-              <span className="text-sm text-gray-500">GemBots Arena • On-chain verified on BNB Chain</span>
+              <span className="text-sm text-gray-500">GemBots Arena &bull; On-chain verified on BNB Chain</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-500">
               <a href="/arena" className="hover:text-gray-300 transition-colors">Arena</a>
@@ -177,6 +184,117 @@ export default function LeaderboardPage() {
     </div>
   );
 }
+
+// ============================================================================
+// Weekly Champions — top 3 with spotlight cards
+// ============================================================================
+
+function WeeklyChampions({ bots }: { bots: TradingEloData[] }) {
+  const medals = ['🥇', '🥈', '🥉'];
+  const glows = [
+    'shadow-yellow-500/20 border-yellow-500/40',
+    'shadow-gray-400/20 border-gray-400/40',
+    'shadow-amber-600/20 border-amber-600/40',
+  ];
+  const labels = ['Champion', '2nd Place', '3rd Place'];
+
+  return (
+    <section className="w-full max-w-6xl mx-auto px-6 mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          👑 Weekly Champions
+        </h2>
+        <ShareButton text={`🏆 GemBots Weekly Champions:\n1. ${bots[0]?.name} (+${bots[0]?.total_pnl.toFixed(2)}%)\n2. ${bots[1]?.name} (+${bots[1]?.total_pnl.toFixed(2)}%)\n3. ${bots[2]?.name} (+${bots[2]?.total_pnl.toFixed(2)}%)\n\nAI Trading Arena 🤖`} />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {bots.map((bot, i) => (
+          <div
+            key={bot.bot_id}
+            className={`bg-gray-900/60 rounded-2xl p-5 border shadow-lg ${glows[i]} transition-all hover:scale-[1.02]`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-3xl">{medals[i]}</span>
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{labels[i]}</span>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-1">{bot.name}</h3>
+            <div className="flex items-center gap-3 mb-3">
+              <span className={`text-lg font-mono font-bold ${bot.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {bot.total_pnl >= 0 ? '+' : ''}{bot.total_pnl.toFixed(2)}%
+              </span>
+              <span className="text-sm text-[#F0B90B] font-mono">{bot.elo.toFixed(0)} ELO</span>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-gray-400">
+              <span className="text-green-400">{bot.wins}W</span>
+              <span className="text-red-400">{bot.losses}L</span>
+              {bot.draws > 0 && <span>{bot.draws}D</span>}
+              {(bot.current_streak || 0) >= 3 && (
+                <span className="px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/30 font-bold">
+                  🔥 {bot.current_streak} streak
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================================
+// Share Button
+// ============================================================================
+
+function ShareButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const shareToX = () => {
+    const url = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent('https://gembots.space/leaderboard')}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const shareToTelegram = () => {
+    const url = `https://t.me/share/url?url=${encodeURIComponent('https://gembots.space/leaderboard')}&text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`${text}\n\nhttps://gembots.space/leaderboard`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={shareToX}
+        className="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white text-xs font-medium transition-colors border border-gray-700 hover:border-gray-600"
+        title="Share to X"
+      >
+        𝕏 Share
+      </button>
+      <button
+        onClick={shareToTelegram}
+        className="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white text-xs font-medium transition-colors border border-gray-700 hover:border-gray-600"
+        title="Share to Telegram"
+      >
+        ✈️ Telegram
+      </button>
+      <button
+        onClick={copyLink}
+        className="px-3 py-1.5 rounded-lg bg-gray-800 text-gray-400 hover:text-white text-xs font-medium transition-colors border border-gray-700 hover:border-gray-600"
+        title="Copy link"
+      >
+        {copied ? '✅ Copied' : '📋 Copy'}
+      </button>
+    </div>
+  );
+}
+
+// ============================================================================
+// Trading League Tab
+// ============================================================================
 
 function TradingLeagueTab({ data, portfolios }: { data: TradingLeagueData | null; portfolios: TradingPortfolioData[] }) {
   if (!data || !data.leaderboard?.length) {
@@ -264,8 +382,9 @@ function TradingLeagueTab({ data, portfolios }: { data: TradingLeagueData | null
 
       {/* Bot Leaderboard table */}
       <div className="bg-gray-900/50 rounded-xl border border-gray-800 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-800">
+        <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
           <h3 className="text-lg font-bold text-white">🏆 Bot Rankings</h3>
+          <ShareButton text={`🏆 GemBots Trading League Rankings\n\nTop bots by P&L — real AI battles, real profits.\n\n🤖 AI Trading Arena`} />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -295,12 +414,27 @@ function TradingLeagueTab({ data, portfolios }: { data: TradingLeagueData | null
                       ? 'text-red-400'
                       : 'text-white';
 
+                const winRate = bot.wins + bot.losses > 0 ? (bot.wins / (bot.wins + bot.losses)) * 100 : 0;
+                const streak = bot.current_streak || 0;
+
                 return (
                   <tr key={bot.bot_id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
                     <td className="px-4 py-4 text-lg">
                       {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
                     </td>
-                    <td className="px-4 py-4 font-bold text-white">{bot.name}</td>
+                    <td className="px-4 py-4">
+                      <span className="font-bold text-white">{bot.name}</span>
+                      {streak >= 10 && (
+                        <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold rounded bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                          🔥 {streak}
+                        </span>
+                      )}
+                      {streak >= 5 && streak < 10 && (
+                        <span className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-bold rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">
+                          ⚡ {streak}
+                        </span>
+                      )}
+                    </td>
                     <td className={`px-4 py-4 text-right font-mono font-bold ${balanceColorClass}`}>
                       {typeof balance === 'number' ? currencyFormatter.format(balance) : '-'}
                     </td>
@@ -325,30 +459,48 @@ function TradingLeagueTab({ data, portfolios }: { data: TradingLeagueData | null
         </div>
       </div>
 
-      {/* Recent battles */}
+      {/* Recent Battles — enhanced with share */}
       {data.recentBattles?.length > 0 && (
         <div className="mt-8">
-          <h3 className="text-xl font-bold text-white mb-4">📊 Recent Battles</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-white">📊 Recent Battles</h3>
+          </div>
           <div className="space-y-2">
-            {data.recentBattles.map((b: any, i: number) => (
-              <div key={i} className="bg-gray-900/30 rounded-lg p-4 border border-gray-800/50 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-mono text-gray-500 bg-gray-800 px-2 py-1 rounded">{b.symbol}</span>
-                  <span className="font-bold text-white">{b.bot1_name}</span>
-                  <span className="text-gray-600">vs</span>
-                  <span className="font-bold text-white">{b.bot2_name}</span>
+            {data.recentBattles.slice(0, 10).map((b: any, i: number) => {
+              const bot1Won = (b.bot1_pnl || 0) > (b.bot2_pnl || 0);
+              return (
+                <div key={i} className="bg-gray-900/30 rounded-lg p-4 border border-gray-800/50 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-xs font-mono text-gray-500 bg-gray-800 px-2 py-1 rounded">{b.symbol}</span>
+                    <span className={`font-bold ${bot1Won ? 'text-green-400' : 'text-white'}`}>{b.bot1_name}</span>
+                    <span className="text-gray-600">vs</span>
+                    <span className={`font-bold ${!bot1Won ? 'text-green-400' : 'text-white'}`}>{b.bot2_name}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className={`font-mono ${(b.bot1_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {(b.bot1_pnl || 0) >= 0 ? '+' : ''}{(b.bot1_pnl || 0).toFixed(3)}%
+                    </span>
+                    <span className="text-gray-600">vs</span>
+                    <span className={`font-mono ${(b.bot2_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {(b.bot2_pnl || 0) >= 0 ? '+' : ''}{(b.bot2_pnl || 0).toFixed(3)}%
+                    </span>
+                    <button
+                      onClick={() => {
+                        const winner = bot1Won ? b.bot1_name : b.bot2_name;
+                        const winPnl = bot1Won ? b.bot1_pnl : b.bot2_pnl;
+                        const text = `⚔️ ${b.bot1_name} vs ${b.bot2_name}\n📊 ${b.symbol}\n🏆 Winner: ${winner} (+${(winPnl || 0).toFixed(3)}%)\n\n🤖 GemBots Arena`;
+                        const url = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent('https://gembots.space/arena')}`;
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                      }}
+                      className="px-2 py-1 rounded bg-gray-800 text-gray-500 hover:text-white text-xs transition-colors"
+                      title="Share battle"
+                    >
+                      𝕏
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 text-sm">
-                  <span className={`font-mono ${(b.bot1_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {(b.bot1_pnl || 0) >= 0 ? '+' : ''}{(b.bot1_pnl || 0).toFixed(3)}%
-                  </span>
-                  <span className="text-gray-600">vs</span>
-                  <span className={`font-mono ${(b.bot2_pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {(b.bot2_pnl || 0) >= 0 ? '+' : ''}{(b.bot2_pnl || 0).toFixed(3)}%
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -363,7 +515,7 @@ function ClassicTab({ bots }: { bots: ClassicBot[] }) {
 
   return (
     <section className="w-full max-w-6xl mx-auto px-6">
-      <p className="text-gray-500 text-sm mb-6">560K+ battles completed • Arena Classic (proximity prediction)</p>
+      <p className="text-gray-500 text-sm mb-6">560K+ battles completed &bull; Arena Classic (proximity prediction)</p>
       <div className="space-y-4">
         {bots.slice(0, 20).map((bot, i) => (
           <div key={i} className="bg-gray-900/50 rounded-xl p-5 border border-gray-800 hover:border-[#F0B90B]/30 transition-all">

@@ -269,3 +269,9 @@ body {
     margin-right: 6px !important;
   }
 }
+
+
+/* Mobile safe area for bottom nav */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
