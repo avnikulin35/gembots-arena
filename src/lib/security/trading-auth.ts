@@ -96,7 +96,7 @@ function validateBasePayload(payload: BaseAuthPayload): { timestamp: string } {
 }
 
 export function buildWalletMessage(nfaId: number, nonce: string, timestamp: number | string): string {
-  return `GemBots Trade|nfaId=${nfaId}|nonce=${nonce}|timestamp=${normalizeTimestamp(timestamp)}`;
+  return `GemBots Wallet|nfaId=${nfaId}|nonce=${nonce}|timestamp=${normalizeTimestamp(timestamp)}`;
 }
 
 export function buildTradeMessage(payload: {
