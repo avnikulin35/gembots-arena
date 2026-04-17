@@ -30,14 +30,14 @@ import { canTrade, triggerCircuitBreaker, type RiskCheckResult } from '@/lib/bsc
 // ─── Supabase Client ─────────────────────────────────────────────────────────
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
 if (!supabaseUrl) {
   throw new Error('SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) is required for trade executor startup');
 }
 
 if (!supabaseServiceRoleKey) {
-  throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for live trading startup');
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY (or legacy SUPABASE_SERVICE_KEY) is required for live trading startup');
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
@@ -295,7 +295,7 @@ export function checkLiveTradingReadiness(): { ready: boolean; issues: string[] 
     issues.push('NEXT_PUBLIC_SUPABASE_URL is not set');
   }
   if (!supabaseServiceRoleKey) {
-    issues.push('Supabase service role key is not set');
+    issues.push('Supabase service role key is not set (SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY)');
   }
 
   return { ready: issues.length === 0, issues };
