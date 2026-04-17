@@ -136,7 +136,14 @@ async function markNonceUsed(nonce: string): Promise<void> {
 }
 
 async function verifySignedMessage(payload: BaseAuthPayload, expectedMessage: string): Promise<{ ownerAddress: string; message: string }> {
-  const recoveredAddress = verifyMessage(expectedMessage, payload.signature);
+  let recoveredAddress: string;
+
+  try {
+    recoveredAddress = verifyMessage(expectedMessage, payload.signature);
+  } catch {
+    throw new TradingAuthError('signature verification failed', 401);
+  }
+
   if (recoveredAddress.toLowerCase() !== payload.ownerAddress.toLowerCase()) {
     throw new TradingAuthError('signature verification failed', 401);
   }
