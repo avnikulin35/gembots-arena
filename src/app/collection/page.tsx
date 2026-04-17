@@ -360,6 +360,11 @@ function NFACard({ nfa, index }: { nfa: CollectionNFA; index: number }) {
                   🌟 {nfa.special || 'Genesis'}
                 </span>
               )}
+              {nfa.isGenesis && (
+                <span className="rounded-full border border-emerald-400/35 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold text-emerald-200">
+                  💰 Revenue Share
+                </span>
+              )}
             </div>
 
             <div className="absolute right-4 top-4">
