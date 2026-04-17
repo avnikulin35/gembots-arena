@@ -1,10 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Bot, Prediction, DailyStats, TokenPrice, Stake } from '../types';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+if (!supabaseUrl) {
+  throw new Error('SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) is required for server supabase client');
+}
+
+if (!supabaseServiceRoleKey) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY (or legacy SUPABASE_SERVICE_KEY) is required for server supabase client');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 export interface Database {
   public: {
@@ -38,13 +46,12 @@ export interface Database {
   };
 }
 
-// API functions
 export async function getBots() {
   const { data, error } = await supabase
     .from('bots')
     .select('*')
     .order('reputation', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -55,7 +62,7 @@ export async function getBot(id: string) {
     .select('*')
     .eq('id', id)
     .single();
-  
+
   if (error) throw error;
   return data;
 }
@@ -72,7 +79,7 @@ export async function getPredictions() {
       )
     `)
     .order('predicted_at', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -83,18 +90,17 @@ export async function createPrediction(prediction: Database['public']['Tables'][
     .insert(prediction)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }
 
-// Stakes functions
 export async function getStakes() {
   const { data, error } = await supabase
     .from('stakes')
     .select('*')
     .order('created_at', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -105,7 +111,7 @@ export async function getUserStakes(walletAddress: string) {
     .select('*')
     .eq('wallet_address', walletAddress)
     .order('created_at', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -116,7 +122,7 @@ export async function getActiveStakes() {
     .select('*')
     .eq('result', 'pending')
     .order('created_at', { ascending: false });
-  
+
   if (error) throw error;
   return data;
 }
@@ -127,7 +133,7 @@ export async function createStake(stake: Database['public']['Tables']['stakes'][
     .insert(stake)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data;
 }

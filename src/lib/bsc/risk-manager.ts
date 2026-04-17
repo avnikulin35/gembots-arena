@@ -15,12 +15,18 @@ import { createClient } from '@supabase/supabase-js';
 import { MIN_GAS_RESERVE_BNB } from '@/lib/bsc/pancakeswap';
 import { ethers } from 'ethers';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY
-  || process.env.SUPABASE_SERVICE_ROLE_KEY
-  || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+if (!supabaseUrl) {
+  throw new Error('SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) is required for risk manager startup');
+}
+
+if (!supabaseServiceRoleKey) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY (or legacy SUPABASE_SERVICE_KEY) is required for risk manager startup');
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
