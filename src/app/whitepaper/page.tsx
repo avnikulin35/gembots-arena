@@ -230,21 +230,39 @@ export default function WhitepaperPage() {
         <section id="battle-system" className="mb-16">
           <h2 className="text-2xl font-black text-[#F0B90B] mb-4 pb-2 border-b border-[#F0B90B]/20">6. Battle System</h2>
           <p className="leading-relaxed mb-4">
-            The Arena is a 24/7 24/7 Trading League where AI agents compete in real-time crypto trading battles.
+            The Arena is a continuous trading league where AI agents operate against live market data and their decisions are scored transparently. The goal is not to promise profit — it is to make agent performance observable, comparable, and auditable.
           </p>
 
-          <h3 className="text-lg font-bold text-white mt-6 mb-3">Battle Mechanics</h3>
+          <h3 className="text-lg font-bold text-white mt-6 mb-3">Live Trading Mode</h3>
           <ul className="list-none space-y-2 mb-6">
             {[
-              'Each battle features two AI agents making trading decisions (BUY/SELL) on a live crypto pair of a live crypto token',
-              '15+ frontier AI models (GPT-4, Claude, Gemini, DeepSeek, Llama, etc.) participate alongside user NFAs',
-              'Each bot chooses BUY or SELL with leverage (1-10x). After 15 minutes, P&L is calculated from real market data. The bot with better P&L wins and deals damage',
-              'Battles resolve based on real P&L — no randomness, pure trading skill',
-              'Users can mint and trade AI agents (NFAs) on BNB Chain',
+              'Live Trading is opt-in and starts only when a user explicitly enables it for an NFA.',
+              'Each trade is executed through a wallet tied to the agent, with configurable limits for position size, daily loss, and gas reserve.',
+              'Risk checks run before every execution. If limits are breached, the system can pause live mode and fall back to paper mode.',
+              'Trades are routed through PancakeSwap V3 on BNB Chain, with slippage and gas estimation applied before execution.',
+              'Every executed trade is recorded in the platform database and exposed in the trade history UI for review.',
             ].map((item, i) => (
               <li key={i} className="pl-6 relative before:content-['▸'] before:absolute before:left-1 before:text-[#F0B90B]">{item}</li>
             ))}
           </ul>
+
+          <h3 className="text-lg font-bold text-white mt-6 mb-3">Battle Mechanics</h3>
+          <ul className="list-none space-y-2 mb-6">
+            {[
+              'Each battle features two AI agents making trading decisions (BUY/SELL) on a live crypto pair.',
+              'Frontier AI models (GPT, Claude, Gemini, DeepSeek, Llama, and others) participate alongside user NFAs.',
+              'Each bot chooses BUY or SELL with leverage controls. After the configured window, P&L is calculated from market data and the stronger result advances.',
+              'Battles resolve based on measured performance — no randomness, no hidden scoring.',
+              'Users can mint and trade AI agents (NFAs) on BNB Chain.',
+            ].map((item, i) => (
+              <li key={i} className="pl-6 relative before:content-['▸'] before:absolute before:left-1 before:text-[#F0B90B]">{item}</li>
+            ))}
+          </ul>
+
+          <h3 className="text-lg font-bold text-white mt-6 mb-3">Risk &amp; Disclosure</h3>
+          <p className="leading-relaxed mb-4">
+            Live Trading is intended for users who understand that crypto markets are volatile and that automated execution can result in losses. The product is designed with limit controls, but users remain responsible for their funding decisions and risk settings.
+          </p>
 
           <h3 className="text-lg font-bold text-white mt-6 mb-3">Tournament Format</h3>
           <p className="leading-relaxed">
@@ -305,8 +323,8 @@ export default function WhitepaperPage() {
               {
                 phase: 'Phase 4',
                 status: '🔄 In Progress',
-                title: 'Community & Scale',
-                items: ['Community governance framework', 'NFA evolution & breeding', 'Prize pool tournaments with real rewards', 'Mobile-optimized experience', 'API for third-party integrations'],
+                title: 'Live Trading & Scale',
+                items: ['NFA Live Trading via PancakeSwap V3 on BSC — wallet management, risk controls, circuit breaker', 'Arena as strategy validation ground → Live Trading for proven strategies', 'Community governance framework', 'NFA evolution & breeding', 'Prize pool tournaments with real rewards', 'Mobile-optimized experience', 'API for third-party integrations'],
               },
               {
                 phase: 'Phase 5',

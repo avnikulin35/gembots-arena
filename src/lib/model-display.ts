@@ -27,6 +27,9 @@ export const MODEL_DISPLAY_NAMES: Record<string, string> = {
   'google/gemma-3-27b-it:free': 'Gemma 3 27B',
   'google/gemma-3-12b-it': 'Gemma 3 12B',
   'google/gemma-3-4b-it': 'Gemma 3 4B',
+  'google/gemma-4-31b-it:free': 'Gemma 4 31B',
+  'google/gemma-4-26b-a4b-it:free': 'Gemma 4 26B',
+  'qwen/qwen3-next-80b-a3b-instruct:free': 'Qwen3 Next 80B',
   // Anthropic
   'anthropic/claude-sonnet-4.6': 'Claude Sonnet 4.6',
   'anthropic/claude-haiku-4.5': 'Claude Haiku 4.5',
@@ -34,6 +37,7 @@ export const MODEL_DISPLAY_NAMES: Record<string, string> = {
   // Meta
   'meta-llama/llama-4-maverick': 'Llama 4 Maverick',
   'meta-llama/llama-3.3-70b-instruct': 'Llama 3.3 70B',
+'meta-llama/llama-3.3-70b-instruct:free': 'Llama 3.3 70B',
   // Mistral
   'mistralai/mistral-large-2512': 'Mistral Large',
   'mistralai/mistral-large-2411': 'Mistral Large',

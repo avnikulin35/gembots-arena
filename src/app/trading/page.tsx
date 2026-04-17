@@ -271,7 +271,11 @@ function StatsBar({ stats }: { stats: TradingLeagueData['stats'] | null }) {
 
 function LiveBattles({ active, recent }: { active: Battle[]; recent: Battle[] }) {
   const [selectedBattle, setSelectedBattle] = useState<string | null>(null);
-  const allBattles = [...active, ...recent];
+  const [chainGPTOnly, setChainGPTOnly] = useState(false);
+  const rawBattles = [...active, ...recent];
+  const allBattles = chainGPTOnly
+    ? rawBattles.filter(b => b.bot1_name?.includes('ChainGPT') || b.bot2_name?.includes('ChainGPT'))
+    : rawBattles;
 
   return (
     <motion.div
@@ -293,7 +297,19 @@ function LiveBattles({ active, recent }: { active: Battle[]; recent: Battle[] })
             </span>
           )}
         </h2>
-        <span className="text-xs text-gray-600">Auto-refreshes every 10s</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setChainGPTOnly(!chainGPTOnly)}
+            className={`text-xs px-2.5 py-1 rounded-lg border font-bold transition-colors ${
+              chainGPTOnly
+                ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+                : 'bg-gray-800/50 text-gray-500 border-gray-700 hover:border-gray-600'
+            }`}
+          >
+            🧠 ChainGPT
+          </button>
+          <span className="text-xs text-gray-600">Auto-refreshes every 10s</span>
+        </div>
       </div>
 
       {/* Battle Chart Modal */}

@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getOnChainOwnerAddress } from '@/lib/security/trading-ownership';
+import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
+import { ZeroAddress } from 'ethers';
+
+// ─── Rate limit: 20 config changes per 10 min per IP ───
+const CONFIG_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
 // ─── POST: Update trading config ─────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  const rateLimitResponse = checkRateLimit(request, 20, CONFIG_RATE_LIMIT_WINDOW_MS);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const body = await request.json();
     const { nfaId, ownerAddress, mode, config } = body;
@@ -26,14 +35,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
     }
 
-    // Verify ownership
+    // ─── On-chain ownership verification (best-effort) ───
+    let onChainOwner: string | null = null;
+    let chainReachable = true;
+    try {
+      onChainOwner = await getOnChainOwnerAddress(parseInt(nfaId));
+    } catch {
+      chainReachable = false;
+    }
+
+    if (chainReachable) {
+      if (!onChainOwner || onChainOwner === ZeroAddress) {
+        /* NFT not found on-chain — fall through to DB-only check */
+      } else if (onChainOwner.toLowerCase() !== ownerAddress.toLowerCase()) {
+        return NextResponse.json(
+          { error: 'Not the owner of this NFA (on-chain verification failed)' },
+          { status: 403 }
+        );
+      }
+    }
+
+    // DB-level ownership check (always enforced)
     if (bot.wallet_address?.toLowerCase() !== ownerAddress.toLowerCase()) {
       return NextResponse.json({ error: 'Not the owner of this NFA bot' }, { status: 403 });
     }
 
     const updates: Record<string, unknown> = {};
 
-    // Update mode if provided
+    // ─── Mode transition guardrails ───
     if (mode !== undefined) {
       if (!['off', 'paper', 'live'].includes(mode)) {
         return NextResponse.json(
@@ -47,10 +76,18 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      
+
       // Extra validation for live mode
       if (mode === 'live') {
-        // Check master switch
+        // 1. Master switch
+        if (process.env.NFA_WALLET_MASTER_KEY === undefined || process.env.NFA_WALLET_MASTER_KEY?.length !== 64) {
+          return NextResponse.json(
+            { error: 'Server wallet encryption not configured — live trading is not available' },
+            { status: 500 }
+          );
+        }
+
+        // 2. Live trading env gate
         if (process.env.NFA_LIVE_TRADING_ENABLED !== 'true') {
           return NextResponse.json(
             { error: 'Live trading is not enabled on the server (NFA_LIVE_TRADING_ENABLED)' },
@@ -58,7 +95,7 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Check wallet has BNB balance
+        // 3. Wallet must exist and have BNB
         try {
           const { ethers } = await import('ethers');
           const provider = new ethers.JsonRpcProvider(
@@ -67,26 +104,25 @@ export async function POST(request: NextRequest) {
           );
           const balance = await provider.getBalance(bot.trading_wallet_address);
           const bnb = parseFloat(ethers.formatEther(balance));
-          
+
           if (bnb < 0.01) {
             return NextResponse.json(
-              { error: `Insufficient BNB balance: ${bnb.toFixed(6)} BNB. Fund the wallet with at least 0.01 BNB before enabling live trading.`, wallet: bot.trading_wallet_address },
+              { error: `Insufficient BNB: ${bnb.toFixed(6)}. Need ≥ 0.01 BNB.` },
               { status: 400 }
             );
           }
         } catch (err) {
-          console.error('Balance check error:', err);
           return NextResponse.json(
             { error: 'Failed to verify wallet balance. Try again later.' },
             { status: 500 }
           );
         }
       }
-      
+
       updates.trading_mode = mode;
     }
 
-    // Update config if provided
+    // ─── Trading config validation ───
     if (config) {
       const currentConfig = bot.trading_config || {};
       const merged = { ...currentConfig, ...config };
@@ -131,7 +167,6 @@ export async function POST(request: NextRequest) {
       .eq('id', bot.id);
 
     if (updateError) {
-      console.error('Failed to update config:', updateError);
       return NextResponse.json({ error: 'Failed to update config' }, { status: 500 });
     }
 
@@ -142,7 +177,7 @@ export async function POST(request: NextRequest) {
       message: 'Trading config updated',
     });
   } catch (err) {
-    console.error('POST /api/nfa/trading/config error:', err);
+    console.error('POST /api/nfa/trading/config error');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

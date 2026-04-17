@@ -20,17 +20,27 @@ const ERC20_ABI = [
 
 export async function GET(request: NextRequest) {
   const nfaId = request.nextUrl.searchParams.get('nfaId');
+  const ownerAddress = request.nextUrl.searchParams.get('ownerAddress');
 
   if (!nfaId) {
     return NextResponse.json({ error: 'nfaId is required' }, { status: 400 });
   }
 
+  // Require ownerAddress to prevent unauthorized balance enumeration
+  if (!ownerAddress) {
+    return NextResponse.json(
+      { error: 'ownerAddress is required for balance queries' },
+      { status: 400 }
+    );
+  }
+
   try {
-    // Get bot wallet address
+    const nfaIdNum = parseInt(nfaId);
+
     const { data: bot, error } = await supabase
       .from('bots')
-      .select('id, nfa_id, trading_wallet_address, trading_mode')
-      .eq('nfa_id', parseInt(nfaId))
+      .select('id, nfa_id, wallet_address, trading_wallet_address, trading_mode')
+      .eq('nfa_id', nfaIdNum)
       .single();
 
     if (error || !bot) {
@@ -39,6 +49,11 @@ export async function GET(request: NextRequest) {
 
     if (!bot.trading_wallet_address) {
       return NextResponse.json({ error: 'No wallet generated for this bot' }, { status: 400 });
+    }
+
+    // Verify caller owns the bot
+    if (bot.wallet_address?.toLowerCase() !== ownerAddress.toLowerCase()) {
+      return NextResponse.json({ error: 'Not the owner of this NFA bot' }, { status: 403 });
     }
 
     const walletAddress = bot.trading_wallet_address;
@@ -79,7 +94,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    console.error('GET /api/nfa/trading/balance error:', err);
+    console.error('GET /api/nfa/trading/balance error');
     return NextResponse.json({ error: 'Failed to fetch balance' }, { status: 500 });
   }
 }

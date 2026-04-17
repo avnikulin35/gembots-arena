@@ -171,6 +171,10 @@ ensureColumn('trading_battles', 'bot2_pnl', 'REAL');
 ensureColumn('trading_battles', 'bot1_model', 'TEXT');
 ensureColumn('trading_battles', 'bot2_model', 'TEXT');
 ensureColumn('trading_battles', 'commentary', 'TEXT');
+ensureColumn('trading_elo', 'draw', 'INTEGER DEFAULT 0');
+
+// Legacy compatibility: some older report queries still expect a singular `draw` column.
+db.exec(`UPDATE trading_elo SET draw = COALESCE(draws, 0) WHERE COALESCE(draw, -1) != COALESCE(draws, 0)`);
 
 // Stakes functions
 export function createStake(data: {

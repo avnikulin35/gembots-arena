@@ -41,18 +41,12 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 const userSkills = new Map();
 // ==================== SKILL PROMPTS ====================
 const SKILL_PROMPTS = {
-    default: "Ты GemBot 💎🦍 — крипто AI-ассистент от GemBots. Дружелюбный, конкретный, с юмором. Разбираешься в крипте, трейдинге и блокчейне. Отвечай на русском. Не раскрывай модель — ты GemBot. ВАЖНО: Отвечай ТОЛЬКО на текущий вопрос пользователя. Не упоминай прошлые факты о пользователе если они не релевантны вопросу. При команде сохрани или запомни — просто подтверди: сохранил, без лишних комментариев.",
-    doctor: "Ты GemBot 💎 Доктор 👨‍⚕️. Анализы, диагнозы, лекарства. ⚠️ «Не заменяю врача». Русский.",
-    chef: "Ты GemBot 💎 Шеф-повар 👨‍🍳. Рецепты, КБЖУ, meal planning. Русский.",
-    mechanic: "Ты GemBot 💎 Автомеханик 🔧. Диагностика, OBD-II, ТО. Русский.",
-    lawyer: "Ты GemBot 💎 Юрист ⚖️. Права, ТК РФ, ГК РФ. Ссылайся на статьи. «Рекомендую юриста». Русский.",
-    finance: "Ты GemBot 💎 Финансист 📊. Бюджет, налоги, инвестиции. Считай точно. «Не инвест-рекомендация». Русский.",
-    // Crypto personas
-    scalper: "Ты Скальпер ⚡ — крипто-трейдер. Короткие сделки, быстрые движения, объёмы, уровни поддержки/сопротивления. Отвечай кратко и по делу. Русский.",
-    analyst: "Ты Аналитик 📊 — крипто-эксперт. Фундаментал, он-чейн метрики, макро-анализ. Давай структурированный разбор. Русский.",
-    pump_hunter: "Ты Pump Hunter 🚀 — охотник за пампами. Ищу монеты с потенциалом x10-x100. Анализ токеномики, соцсетей, хайпа. Русский.",
-    whale_tracker: "Ты Whale Tracker 🐋 — трекер китов. Большие кошельки, движения, манипуляции. Что делают крупные игроки? Русский.",
-    sentiment: "Ты Sentiment Guru 🔮 — аналитик настроений. Fear/greed, соцсети, тренды. Общее настроение рынка. Русский.",
+    default: "You are GemBot 💎 — AI crypto assistant by GemBots. Friendly, specific, with humor. Understand crypto, trading, and blockchain. Answer in English. Do not reveal the model — you are GemBot. IMPORTANT: Answer ONLY the user's current question. Do not mention past facts about the user if they are not relevant to the question. For a save or remember command, just confirm: saved, without extra comments.",
+    scalper: "You are GemBot ⚡ Scalper. Short-term trading expert: quick setups, entry/exit points, momentum plays, 1-15min charts. Answer concisely and to the point. English.",
+    whale: "You are GemBot 🐋 Whale Watcher. On-chain analysis expert: track whale movements, large transactions, smart money flows, exchange inflows. English.",
+    degen: "You are GemBot 🚀 Degen Hunter. Memecoin and new token expert: new token launches, pump detection, rug pull checks, social sentiment. English.",
+    analyst: "You are GemBot 📊 Analyst. Fundamental crypto research: project fundamentals, tokenomics, team analysis, competitive landscape. Provide structured breakdowns. English.",
+    defi: "You are GemBot 🏦 DeFi Expert. Yield farming and protocol analysis: liquidity pools, protocol risks, APY comparison, gas optimization. English.",
 };
 // ==================== LLM ====================
 async function callLLM(messages, opts = {}) {
@@ -104,7 +98,7 @@ function buildSystemPrompt(userId, skill) {
     const base = SKILL_PROMPTS[skill || "default"] || SKILL_PROMPTS.default;
     let memSection = "";
     if (mem.length > 0) {
-        memSection = "\n\nЧто ты знаешь о пользователе:\n" + mem.map((m) => `- ${m.fact}`).join("\n");
+        memSection = "\n\nWhat you know about the user:\n" + mem.map((m) => `- ${m.fact}`).join("\n");
     }
     return base + memSection;
 }
@@ -161,7 +155,7 @@ async function perplexitySearch(query) {
 }
 async function detectSearchIntent(msg) {
     try {
-        const answer = await callLLM([{ role: "user", content: `Нужна ли актуальная информация из интернета? Цены, новости, курсы валют, погода, текущие события = ДА.\nДА -> YES|поисковый запрос на русском\nНЕТ -> NO\n\nСообщение: "${msg.slice(0, 500)}"` }], { temperature: 0, max_tokens: 50 });
+        const answer = await callLLM([{ role: "user", content: `Do I need current information from the internet? Prices, news, exchange rates, weather, current events = YES.\nYES -> YES|search query in English\nNO -> NO\n\nMessage: "${msg.slice(0, 500)}"` }], { temperature: 0, max_tokens: 50 });
         if (answer.toUpperCase().startsWith("YES|")) {
             const q = answer.slice(4).trim();
             if (q.length > 0)
@@ -173,7 +167,7 @@ async function detectSearchIntent(msg) {
 }
 // ==================== VISION ====================
 async function analyzeImage(base64, mime, prompt) {
-    const p = prompt || "Подробно опиши изображение. Текст — извлеки. Русский.";
+    const p = prompt || "Describe the image in detail. Extract text. English.";
     for (const model of [VISION_MODEL, "qwen/qwen2.5-vl-32b-instruct"]) {
         try {
             const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -195,12 +189,12 @@ async function analyzeImage(base64, mime, prompt) {
         }
         catch { }
     }
-    return "[Не удалось проанализировать изображение]";
+    return "[Failed to analyze image]";
 }
 // ==================== MEMORY ====================
 async function extractFacts(userId, userMsg, assistantMsg) {
     try {
-        const content = await callLLM([{ role: "user", content: `Извлеки факты о пользователе. Нет — []. Формат: [{"fact":"...","category":"personal|work|health|other"}]\n\nСообщение: "${userMsg.slice(0, 800)}"\nОтвет: "${assistantMsg.slice(0, 600)}"\n\nJSON:` }], { temperature: 0.1, max_tokens: 512 });
+        const content = await callLLM([{ role: "user", content: `Extract facts about the user. None -> []. Format: [{"fact":"...","category":"personal|work|health|other"}]\n\nMessage: "${userMsg.slice(0, 800)}"\nResponse: "${assistantMsg.slice(0, 600)}"\n\nJSON:` }], { temperature: 0.1, max_tokens: 512 });
         const m = content.match(/\[[\s\S]*\]/);
         if (!m)
             return;
@@ -230,7 +224,7 @@ async function transcribe(filePath) {
     const buf = fs.readFileSync(filePath);
     form.append("file", new Blob([buf], { type: "audio/ogg" }), "audio.ogg");
     form.append("model", "whisper-1");
-    form.append("language", "ru");
+    form.append("language", "en"); // Changed to English
     const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, body: form,
     });
@@ -338,7 +332,7 @@ async function ytSubtitles(url) {
     return new Promise((resolve) => {
         const dir = `/tmp/yt_${Date.now()}`;
         fs.mkdirSync(dir, { recursive: true });
-        const proc = spawn("yt-dlp", ["--write-auto-sub", "--sub-lang", "ru,en", "--skip-download", "--sub-format", "vtt", "-o", `${dir}/subs`, url]);
+        const proc = spawn("yt-dlp", ["--write-auto-sub", "--sub-lang", "en", "--skip-download", "--sub-format", "vtt", "-o", `${dir}/subs`, url]);
         const timer = setTimeout(() => { proc.kill(); resolve(null); }, 20000);
         proc.on("close", () => {
             clearTimeout(timer);
@@ -385,13 +379,13 @@ function withBotErrorBoundary(label, handler) {
             const chatId = primary?.chat?.id || primary?.message?.chat?.id;
             if (primary?.id && !primary?.chat && primary?.message?.chat?.id) {
                 try {
-                    await bot.answerCallbackQuery(primary.id, { text: "❌ Ошибка. Попробуй ещё раз" });
+                    await bot.answerCallbackQuery(primary.id, { text: "❌ Error. Try again" });
                 }
                 catch { }
             }
             if (chatId) {
                 try {
-                    await bot.sendMessage(chatId, "❌ Внутренняя ошибка. Бот не упал — попробуй ещё раз.");
+                    await bot.sendMessage(chatId, "❌ Internal error. Bot is online — try again.");
                 }
                 catch { }
             }
@@ -431,7 +425,7 @@ async function handleText(msg, text, isVoice = false) {
     dbHelpers.getOrCreateUser(userId, msg.from.id, msg.from.username || undefined, msg.from.first_name || undefined);
     const balance = dbHelpers.getCredits(userId);
     if (balance < MODEL_COST) {
-        await bot.sendMessage(msg.chat.id, "❌ Кредиты кончились!\n/bonus — ежедневный бонус", { reply_to_message_id: msg.message_id });
+        await bot.sendMessage(msg.chat.id, "❌ Not enough credits!\n/bonus — daily bonus", { reply_to_message_id: msg.message_id });
         return;
     }
     const session = dbHelpers.getOrCreateSession(userId);
@@ -442,7 +436,7 @@ async function handleText(msg, text, isVoice = false) {
         const ytUrl = isYouTube(text);
         let ytContent = null;
         if (ytUrl) {
-            await bot.sendMessage(msg.chat.id, "🎬 Загружаю субтитры...", { reply_to_message_id: msg.message_id });
+            await bot.sendMessage(msg.chat.id, "🎬 Loading subtitles...", { reply_to_message_id: msg.message_id });
             ytContent = await ytSubtitles(ytUrl);
         }
         // URL scrape
@@ -464,25 +458,25 @@ async function handleText(msg, text, isVoice = false) {
         const skill = userSkills.get(userId) || "default";
         let systemContent = buildSystemPrompt(userId, skill);
         if (searchContent)
-            systemContent += `\n\nРезультаты поиска (используй для ответа):\n${searchContent}\n\nТРЕБОВАНИЕ: В конце ответа добавь строку "📎 Источники:" и под ней перечисли ссылки на источники в формате <a href=\"URL\">Название сайта</a> (по одной на строку).`;
+            systemContent += `\n\nSearch results (use for answer):\n${searchContent}\n\nREQUIREMENT: At the end of the answer, add a line "📎 Sources:" and list the links to the sources below it in the format <a href=\"URL\">Site Name</a> (one per line).`;
         const history = dbHelpers.getRecentMessages(userId, session.id, 15);
         const msgs = history.map((m) => ({ role: m.role, content: m.content }));
         if (msgs.length > 0) {
             const last = msgs[msgs.length - 1];
             if (last.role === "user") {
                 if (ytContent)
-                    last.content += `\n\n[Транскрипт YouTube:\n${ytContent}\n]\nСуммаризируй видео.`;
+                    last.content += `\n\n[YouTube Transcript:\n${ytContent}\n]\nSummarize the video.`;
                 if (urlContent)
-                    last.content += `\n\n[Содержимое страницы:\n${urlContent}\n]`;
+                    last.content += `\n\n[Page Content:\n${urlContent}\n]`;
             }
         }
         const response = await callLLM([{ role: "system", content: systemContent }, ...msgs]);
         dbHelpers.chargeCredits(userId, MODEL_COST);
         dbHelpers.addMessage(userId, session.id, "assistant", response, CHAT_MODEL, MODEL_COST);
         const sourcesText2 = searchSources.length > 0
-            ? "\n\n📎 <b>Источники:</b>\n" + searchSources.map(s => `• <a href="${s.url}">${s.title.slice(0, 50)}</a>`).join("\n")
+            ? "\n\n📎 <b>Sources:</b>\n" + searchSources.map(s => `• <a href=\"${s.url}\">${s.title.slice(0, 50)}</a>`).join("\n")
             : "";
-        const suffix = searchContent ? sourcesText2 + "\n\n🌐 <i>С данными из интернета</i>" : "";
+        const suffix = searchContent ? sourcesText2 + "\n\n🌐 <i>With data from the internet</i>" : "";
         await sendLong(msg.chat.id, response + suffix, msg.message_id);
         // Voice reply
         if (isVoice) {
@@ -498,7 +492,7 @@ async function handleText(msg, text, isVoice = false) {
                 }
                 catch (voiceErr) {
                     console.error("Voice reply send error:", voiceErr);
-                    await bot.sendMessage(msg.chat.id, "🔊 Не смог отправить голосовой ответ, но текст уже пришёл выше.", {
+                    await bot.sendMessage(msg.chat.id, "🔊 Could not send voice reply, but text has arrived above.", {
                         reply_to_message_id: msg.message_id,
                     }).catch(() => { });
                 }
@@ -515,37 +509,25 @@ async function handleText(msg, text, isVoice = false) {
     }
     catch (err) {
         console.error("Chat error:", err);
-        await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка"), { reply_to_message_id: msg.message_id });
+        await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Error"), { reply_to_message_id: msg.message_id });
     }
 }
 // ==================== COMMANDS ====================
 bot.onText(/\/start/, withBotErrorBoundary("/start", async (msg) => {
     const userId = uid(msg);
     dbHelpers.getOrCreateUser(userId, msg.from.id, msg.from.username || undefined, msg.from.first_name || undefined);
-    const name = msg.from.first_name || "друг";
+    const name = msg.from.first_name || "friend";
     const welcomePath = "/var/www/gembot/welcome.png";
-    const caption = `💎 <b>Hey, ${esc(name)}!</b>
-
-` +
-        `I'm <b>GemBot</b> — your AI-powered crypto assistant by GemBots.
-
-` +
-        `⚡ What I can do:
-` +
-        `• 📊 Crypto analysis (scalping, fundamentals, on-chain)
-` +
-        `• 🚀 Pump hunting & sentiment tracking
-` +
-        `• 🐋 Whale watching & market signals
-` +
-        `• 🔍 Web search with real-time data
-` +
-        `• 🎤 Voice replies & document analysis
-
-` +
-        `Use /skill to switch between crypto personas.
-` +
-        `Powered by <a href="https://www.chaingpt.org">ChainGPT</a> × <a href="https://gembots.space">GemBots</a>`;
+    const caption = `💎 <b>Hey, ${esc(name)}!</b>\n\n` +
+        `I'm <b>GemBot</b> — your AI-powered crypto assistant.\n\n` +
+        `⚡ What I can do:\n` +
+        `• 📊 Crypto analysis (scalping, fundamentals, on-chain)\n` +
+        `• 🚀 Pump hunting & sentiment tracking\n` +
+        `• 🐋 Whale watching & market signals\n` +
+        `• 🔍 Web search with real-time data\n` +
+        `• 🎤 Voice replies & document analysis\n\n` +
+        `Use /skill to switch between crypto personas.\n` +
+        `Powered by <a href="https://gembots.space">GemBot</a> 🤖⚔️`;
     const replyMarkup = {
         inline_keyboard: [[
                 { text: "💎 Open GemBot", web_app: { url: "https://gembots.space/gembot" } }
@@ -573,34 +555,31 @@ bot.onText(/\/search (.+)/, withBotErrorBoundary("/search", async (msg, match) =
     try {
         const { content: searchContent, sources } = await perplexitySearch(query);
         if (!searchContent) {
-            await bot.sendMessage(msg.chat.id, "🔍 Ничего не найдено");
+            await bot.sendMessage(msg.chat.id, "🔍 Nothing found");
             return;
         }
         const response = await callLLM([
-            { role: "system", content: "Ты поисковый AI. Дай краткий информативный ответ на русском." },
-            { role: "user", content: `Вопрос: ${query}\n\nДанные:\n${searchContent}` },
+            { role: "system", content: "You are a search AI. Provide a concise, informative answer in English." },
+            { role: "user", content: `Question: ${query}\n\nData:\n${searchContent}` },
         ]);
         const sourcesText = sources.length > 0
-            ? "\n\n📎 <b>Источники:</b>\n" + sources.map(s => `• <a href="${s.url}">${s.title.slice(0, 50)}</a>`).join("\n")
+            ? "\n\n📎 <b>Sources:</b>\n" + sources.map(s => `• <a href=\"${s.url}\">${s.title.slice(0, 50)}</a>`).join("\n")
             : "";
-        await sendLong(msg.chat.id, response + sourcesText + "\n\n🌐 <i>Поиск в интернете</i>", msg.message_id);
+        await sendLong(msg.chat.id, response + sourcesText + "\n\n🌐 <i>Search on the internet</i>", msg.message_id);
     }
     catch (err) {
-        await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка"));
+        await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Error"));
     }
 }));
 bot.onText(/\/skill/, withBotErrorBoundary("/skill", async (msg) => {
-    await bot.sendMessage(msg.chat.id, "🎭 <b>Выбери:</b>", {
+    await bot.sendMessage(msg.chat.id, "🎭 <b>Choose:</b>", {
         parse_mode: "HTML",
         reply_markup: {
             inline_keyboard: [
-                [{ text: "🦍 Обычный", callback_data: "sk_default" }],
-                [{ text: "👨‍⚕️ Доктор", callback_data: "sk_doctor" }, { text: "👨‍🍳 Повар", callback_data: "sk_chef" }],
-                [{ text: "🔧 Авто", callback_data: "sk_mechanic" }, { text: "⚖️ Юрист", callback_data: "sk_lawyer" }],
-                [{ text: "📊 Финансист", callback_data: "sk_finance" }],
-                [{ text: "⚡ Скальпер", callback_data: "sk_scalper" }, { text: "📊 Аналитик", callback_data: "sk_analyst" }],
-                [{ text: "🚀 Pump Hunter", callback_data: "sk_pump_hunter" }],
-                [{ text: "🐋 Whale Tracker", callback_data: "sk_whale_tracker" }, { text: "🔮 Sentiment", callback_data: "sk_sentiment" }],
+                [{ text: "💎 GemBot", callback_data: "sk_default" }],
+                [{ text: "⚡ Scalper", callback_data: "sk_scalper" }, { text: "🐋 Whale Watcher", callback_data: "sk_whale" }],
+                [{ text: "🚀 Degen Hunter", callback_data: "sk_degen" }, { text: "📊 Analyst", callback_data: "sk_analyst" }],
+                [{ text: "🏦 DeFi Expert", callback_data: "sk_defi" }],
             ],
         },
     });
@@ -612,40 +591,38 @@ bot.on("callback_query", withBotErrorBoundary("skill_callback", async (query) =>
     const userId = `tg_${query.from.id}`;
     userSkills.set(userId, skill);
     const labels = {
-        default: "🦍 Обычный", doctor: "👨‍⚕️ Доктор", chef: "👨‍🍳 Повар",
-        mechanic: "🔧 Автомеханик", lawyer: "⚖️ Юрист", finance: "📊 Финансист",
-        scalper: "⚡ Скальпер", analyst: "📊 Аналитик",
-        pump_hunter: "🚀 Pump Hunter", whale_tracker: "🐋 Whale Tracker", sentiment: "🔮 Sentiment Guru",
+        default: "💎 GemBot", scalper: "⚡ Scalper", whale: "🐋 Whale Watcher",
+        degen: "🚀 Degen Hunter", analyst: "📊 Analyst", defi: "🏦 DeFi Expert",
     };
     await bot.answerCallbackQuery(query.id, { text: `✅ ${labels[skill] || skill}` });
-    await bot.editMessageText(`✅ Активирован: <b>${labels[skill] || skill}</b>`, {
+    await bot.editMessageText(`✅ Activated: <b>${labels[skill] || skill}</b>`, {
         chat_id: query.message.chat.id, message_id: query.message.message_id, parse_mode: "HTML",
     });
 }));
 bot.onText(/\/memory/, withBotErrorBoundary("/memory", async (msg) => {
     const mems = dbHelpers.getMemories(uid(msg));
     if (!mems.length) {
-        await bot.sendMessage(msg.chat.id, "🧠 Пока пусто. Общайся — я запомню!");
+        await bot.sendMessage(msg.chat.id, "🧠 Empty for now. Chat with me — I'll remember!");
         return;
     }
-    await bot.sendMessage(msg.chat.id, "🧠 <b>Знаю о тебе:</b>\n\n" + mems.map((m, i) => `${i + 1}. ${esc(m.fact)}`).join("\n"), { parse_mode: "HTML" });
+    await bot.sendMessage(msg.chat.id, "🧠 <b>What I know about you:</b>\n\n" + mems.map((m, i) => `${i + 1}. ${esc(m.fact)}`).join("\n"), { parse_mode: "HTML" });
 }));
 bot.onText(/\/credits/, withBotErrorBoundary("/credits", async (msg) => {
     const userId = uid(msg);
     dbHelpers.getOrCreateUser(userId, msg.from.id, msg.from.username || undefined, msg.from.first_name || undefined);
     const bal = dbHelpers.getCredits(userId);
     const bonus = dbHelpers.isDailyBonusAvailable(userId);
-    await bot.sendMessage(msg.chat.id, `💰 Баланс: ${bal} кредитов\n${bonus ? "🎁 /bonus — получить бонус!" : "⏳ Бонус завтра"}`, { parse_mode: "HTML" });
+    await bot.sendMessage(msg.chat.id, `💰 Balance: ${bal} credits\n${bonus ? "🎁 /bonus — get bonus!" : "⏳ Bonus tomorrow"}`, { parse_mode: "HTML" });
 }));
 bot.onText(/\/bonus/, withBotErrorBoundary("/bonus", async (msg) => {
     const userId = uid(msg);
     dbHelpers.getOrCreateUser(userId, msg.from.id, msg.from.username || undefined, msg.from.first_name || undefined);
     if (!dbHelpers.isDailyBonusAvailable(userId)) {
-        await bot.sendMessage(msg.chat.id, "⏳ Бонус уже получен. Завтра!");
+        await bot.sendMessage(msg.chat.id, "⏳ Bonus already claimed. See you tomorrow!");
         return;
     }
     dbHelpers.claimDailyBonus(userId, 10);
-    await bot.sendMessage(msg.chat.id, `🎁 +10 кредитов! Баланс: ${dbHelpers.getCredits(userId)} 💰`);
+    await bot.sendMessage(msg.chat.id, `🎁 +10 credits! Balance: ${dbHelpers.getCredits(userId)} 💰`);
 }));
 // ==================== MESSAGE HANDLERS ====================
 bot.on("message", withBotErrorBoundary("message", async (msg) => {
@@ -653,22 +630,22 @@ bot.on("message", withBotErrorBoundary("message", async (msg) => {
     if (msg.text?.startsWith("/"))
         return;
     // Keyboard buttons
-    if (msg.text === "🔍 Поиск") {
-        await bot.sendMessage(msg.chat.id, "🔍 /search <запрос>\nИли просто задай вопрос!");
+    if (msg.text === "🔍 Search") {
+        await bot.sendMessage(msg.chat.id, "🔍 /search <query>\nOr just ask a question!");
         return;
     }
-    if (msg.text === "🧠 Память") {
-        await bot.sendMessage(msg.chat.id, "🧠 /memory — что я помню");
+    if (msg.text === "🧠 Memory") {
+        await bot.sendMessage(msg.chat.id, "🧠 /memory — what I remember");
         return;
     }
-    if (msg.text === "🎭 Скиллы") {
+    if (msg.text === "🎭 Skills") {
         bot.emit("text", msg, ["/skill"]);
         return;
     }
-    if (msg.text === "💰 Кредиты") {
+    if (msg.text === "💰 Credits") {
         const userId = uid(msg);
         dbHelpers.getOrCreateUser(userId, msg.from.id, msg.from.username || undefined, msg.from.first_name || undefined);
-        await bot.sendMessage(msg.chat.id, `💰 ${dbHelpers.getCredits(userId)} кредитов\n🎁 /bonus`);
+        await bot.sendMessage(msg.chat.id, `💰 ${dbHelpers.getCredits(userId)} credits\n🎁 /bonus`);
         return;
     }
     // Text
@@ -693,14 +670,14 @@ bot.on("message", withBotErrorBoundary("message", async (msg) => {
             }
             catch { }
             if (!text?.trim()) {
-                await bot.sendMessage(msg.chat.id, "🎤 Не распознал. Попробуй ещё.");
+                await bot.sendMessage(msg.chat.id, "🎤 Could not recognize. Try again.");
                 return;
             }
             await bot.sendMessage(msg.chat.id, `🎤 <i>${esc(text)}</i>`, { parse_mode: "HTML", reply_to_message_id: msg.message_id });
             await handleText(msg, text, true);
         }
         catch (err) {
-            await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка голосового"));
+            await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Voice error"));
         }
         return;
     }
@@ -719,10 +696,10 @@ bot.on("message", withBotErrorBoundary("message", async (msg) => {
             const analysis = await analyzeImage(b64, "image/jpeg", caption || undefined);
             if (caption) {
                 const session = dbHelpers.getOrCreateSession(userId);
-                dbHelpers.addMessage(userId, session.id, "user", `[Фото] ${caption}`, CHAT_MODEL);
+                dbHelpers.addMessage(userId, session.id, "user", `[Photo] ${caption}`, CHAT_MODEL);
                 const resp = await callLLM([
                     { role: "system", content: buildSystemPrompt(userId, userSkills.get(userId)) },
-                    { role: "user", content: `${caption}\n\n[Анализ фото:\n${analysis}\n]` },
+                    { role: "user", content: `${caption}\n\n[Photo analysis:\n${analysis}\n]` },
                 ]);
                 dbHelpers.chargeCredits(userId, MODEL_COST);
                 dbHelpers.addMessage(userId, session.id, "assistant", resp, CHAT_MODEL, MODEL_COST);
@@ -731,10 +708,10 @@ bot.on("message", withBotErrorBoundary("message", async (msg) => {
             else {
                 await sendLong(msg.chat.id, analysis, msg.message_id);
             }
-            extractFacts(userId, `[Фото] ${caption}`, analysis).catch(() => { });
+            extractFacts(userId, `[Photo] ${caption}`, analysis).catch(() => { });
         }
         catch (err) {
-            await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка фото"));
+            await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Photo error"));
         }
         return;
     }
@@ -746,7 +723,7 @@ bot.on("message", withBotErrorBoundary("message", async (msg) => {
         const fname = doc.file_name || "file";
         const ext = fname.toLowerCase().split(".").pop() || "";
         if (!["pdf", "txt", "csv", "json", "md", "py", "js", "ts", "html"].includes(ext)) {
-            await bot.sendMessage(msg.chat.id, "📄 Поддерживаю: PDF, TXT, CSV, JSON, MD");
+            await bot.sendMessage(msg.chat.id, "📄 Supports: PDF, TXT, CSV, JSON, MD");
             return;
         }
         await bot.sendChatAction(msg.chat.id, "typing");
@@ -757,24 +734,24 @@ bot.on("message", withBotErrorBoundary("message", async (msg) => {
             let textContent = "";
             if (ext === "pdf") {
                 const pdfParse = (await import("pdf-parse")).default;
-                textContent = (await pdfParse(buf)).text?.slice(0, 6000) || "[PDF без текста]";
+                textContent = (await pdfParse(buf)).text?.slice(0, 6000) || "[PDF without text]";
             }
             else {
                 textContent = buf.toString("utf-8").slice(0, 6000);
             }
-            const caption = msg.caption || `Проанализируй "${fname}"`;
+            const caption = msg.caption || `Analyze "${fname}"`;
             const session = dbHelpers.getOrCreateSession(userId);
-            dbHelpers.addMessage(userId, session.id, "user", `[Файл: ${fname}] ${caption}`, CHAT_MODEL);
+            dbHelpers.addMessage(userId, session.id, "user", `[File: ${fname}] ${caption}`, CHAT_MODEL);
             const resp = await callLLM([
                 { role: "system", content: buildSystemPrompt(userId, userSkills.get(userId)) },
-                { role: "user", content: `${caption}\n\n[Файл "${fname}":\n${textContent}\n]` },
+                { role: "user", content: `${caption}\n\n[File "${fname}":\n${textContent}\n]` },
             ]);
             dbHelpers.chargeCredits(userId, MODEL_COST);
             dbHelpers.addMessage(userId, session.id, "assistant", resp, CHAT_MODEL, MODEL_COST);
             await sendLong(msg.chat.id, `📄 <b>${esc(fname)}</b>\n\n${resp}`, msg.message_id);
         }
         catch (err) {
-            await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "Ошибка файла"));
+            await bot.sendMessage(msg.chat.id, "❌ " + (err.message || "File error"));
         }
         return;
     }
@@ -787,9 +764,9 @@ console.log(`💎 GemBot started | LLM: ${CHAT_MODEL} | Vision: ${VISION_MODEL}`
 console.log(`   Search: ${BRAVE_API_KEY ? "ON" : "OFF"} | Whisper: ${OPENAI_API_KEY ? "ON" : "OFF"}`);
 // ==================== TELEGRAM STARS PAYMENTS ====================
 const STARS_PACKAGES = {
-    buy_starter: { packageId: 'starter', credits: 50, stars: 50, label: '50 кредитов', description: '~25 вопросов' },
-    buy_standard: { packageId: 'standard', credits: 200, stars: 150, label: '200 кредитов', description: '~100 вопросов', popular: true },
-    buy_premium: { packageId: 'premium', credits: 500, stars: 300, label: '500 кредитов', description: '~250 вопросов' },
+    buy_starter: { packageId: 'starter', credits: 50, stars: 50, label: '50 credits', description: '~25 questions' },
+    buy_standard: { packageId: 'standard', credits: 200, stars: 150, label: '200 credits', description: '~100 questions', popular: true },
+    buy_premium: { packageId: 'premium', credits: 500, stars: 300, label: '500 credits', description: '~250 questions' },
 };
 function savePendingStarsPayment(userId, pkg, invoiceId, payload) {
     db.prepare(`
@@ -830,13 +807,13 @@ function markStarsPaymentPaid(params) {
 bot.onText(/\/buy/, withBotErrorBoundary('/buy', async (msg) => {
     const userId = uid(msg);
     dbHelpers.getOrCreateUser(userId, msg.from.id, msg.from.username || undefined, msg.from.first_name || undefined);
-    await bot.sendMessage(msg.chat.id, '💳 <b>Купить кредиты</b>\n\nВыбери пакет Telegram Stars:', {
+    await bot.sendMessage(msg.chat.id, '💳 <b>Buy credits</b>\n\nChoose a Telegram Stars package:', {
         parse_mode: 'HTML',
         reply_markup: {
             inline_keyboard: [
-                [{ text: '50 кредитов — 50 ⭐', callback_data: 'buy_starter' }],
-                [{ text: '200 кредитов — 150 ⭐ · Popular', callback_data: 'buy_standard' }],
-                [{ text: '500 кредитов — 300 ⭐', callback_data: 'buy_premium' }],
+                [{ text: '50 credits — 50 ⭐', callback_data: 'buy_starter' }],
+                [{ text: '200 credits — 150 ⭐ · Popular', callback_data: 'buy_standard' }],
+                [{ text: '500 credits — 300 ⭐', callback_data: 'buy_premium' }],
             ],
         },
     });
@@ -859,11 +836,11 @@ bot.on('callback_query', withBotErrorBoundary('buy_callback', async (query) => {
     savePendingStarsPayment(userId, pkg, invoiceId, payload);
     await bot.answerCallbackQuery(query.id);
     try {
-        await bot.sendInvoice(query.message.chat.id, `🦍 ${pkg.label}`, `GemBot credits top-up на ${pkg.credits} кредитов`, payload, 'XTR', [{ label: pkg.label, amount: pkg.stars }]);
+        await bot.sendInvoice(query.message.chat.id, `💎 ${pkg.label}`, `GemBot credits top-up for ${pkg.credits} credits`, payload, 'XTR', [{ label: pkg.label, amount: pkg.stars }]);
     }
     catch (err) {
         console.error('Stars invoice error:', err.message);
-        await bot.sendMessage(query.message.chat.id, '❌ Ошибка создания инвойса. Попробуй позже.');
+        await bot.sendMessage(query.message.chat.id, '❌ Error creating invoice. Try again later.');
     }
 }));
 bot.on('pre_checkout_query', withBotErrorBoundary('pre_checkout_query', async (query) => {
@@ -896,7 +873,7 @@ bot.on('message', withBotErrorBoundary('payment_message', async (msg) => {
         providerPaymentChargeId: payment.provider_payment_charge_id,
     });
     const newBalance = dbHelpers.getCredits(userId);
-    await bot.sendMessage(msg.chat.id, `✅ <b>Оплата прошла!</b>\n\n+${parsedPayload.credits} кредитов добавлено.\nНовый баланс: <b>${newBalance}</b> кредитов 💰`, { parse_mode: 'HTML' });
+    await bot.sendMessage(msg.chat.id, `✅ <b>Payment successful!</b>\n\n+${parsedPayload.credits} credits added.\nNew balance: <b>${newBalance}</b> credits 💰`, { parse_mode: 'HTML' });
 }));
 bot.on("polling_error", (err) => {
     console.error("Polling error:", err);

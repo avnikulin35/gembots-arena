@@ -1,6 +1,9 @@
 /**
  * Trading Engine — P&L based battle logic
+ * Extended with live execution support for NFA Trading League.
  */
+
+// ─── Paper Trading (existing) ─────────────────────────────────────────────────
 
 export interface TradingDecision {
   action: 'BUY' | 'SELL' | 'HOLD';
@@ -142,4 +145,68 @@ export function eloChange(winnerElo: number, loserElo: number, isDraw: boolean, 
   const loserDelta = kFactor * (loserScore - expectedWinB);
 
   return [winnerDelta, loserDelta];
+}
+
+// ─── Live Trading Interface ───────────────────────────────────────────────────
+
+export interface LiveTradeOrder {
+  nfaId: number;
+  botId: number;
+  action: 'BUY' | 'SELL';
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: number | string;
+  slippageBps?: number;
+  pair?: string;
+  confidence?: number;
+  reasoning?: string;
+}
+
+export interface LiveTradeResult {
+  success: boolean;
+  txHash?: string;
+  blockNumber?: number;
+  amountIn?: string;
+  amountOut?: string;
+  gasUsed?: string;
+  gasCostBnb?: string;
+  error?: string;
+  mode: 'live' | 'paper';
+  timestamp: string;
+}
+
+/**
+ * Execute a trade — routes to live or paper based on bot mode.
+ * This is the unified entry point used by trading-battles-engine.
+ */
+export async function executeTrade(order: LiveTradeOrder): Promise<LiveTradeResult> {
+  // Dynamic import to avoid circular dependencies and client-side bundling
+  const { executeTrade: executeLive, checkLiveTradingReadiness } =
+    await import('@/lib/bsc/trade-executor');
+
+  const readiness = checkLiveTradingReadiness();
+  if (!readiness.ready) {
+    return {
+      success: false,
+      error: `Live trading not ready: ${readiness.issues.join(', ')}`,
+      mode: 'paper',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  // Execute live trade via PancakeSwap
+  const result = await executeLive(order);
+
+  return {
+    success: result.success,
+    txHash: result.txHash,
+    blockNumber: result.blockNumber,
+    amountIn: result.amountIn,
+    amountOut: result.amountOut,
+    gasUsed: result.gasUsed,
+    gasCostBnb: result.gasCostBnb,
+    error: result.error,
+    mode: 'live',
+    timestamp: result.timestamp,
+  };
 }

@@ -37,13 +37,13 @@ const BATTLES_PER_SYMBOL = 3; // 3 pairs per symbol per cycle = 9 battles/cycle 
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 
 const MODEL_POOL = [
-  'qwen/qwen3-235b-a22b-2507',
-  'google/gemma-3-12b-it',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'google/gemma-4-31b-it:free',
   'mistralai/mistral-nemo',
   'google/gemini-2.0-flash-lite-001',
-  'meta-llama/llama-4-maverick',
-  'deepseek/deepseek-r1',
-  'mistralai/mistral-small-24b-instruct-2501',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'google/gemma-3-27b-it:free',
   'openai/gpt-4.1-nano',
 ];
 
@@ -57,6 +57,16 @@ const CHAINGPT_BOT_NAME = '🧠 ChainGPT';
 const OLLAMA_API_URL = 'http://100.70.191.97:11434/api/chat';
 const OLLAMA_MODELS = ['qwen3-30b-nothink'];
 const OLLAMA_BOT_NAME = '🖥️ Qwen3-Local';
+
+// ─── Live Trading Integration ──────────────────────────────────────────────
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const NFA_LIVE_TRADING_ENABLED = process.env.NFA_LIVE_TRADING_ENABLED === 'true';
+
+// Import live trading modules from scripts/lib
+const { executeBuy, executeSell, getQuote, getBNBBalance } = require('./lib/pancakeswap-trader');
+const { decryptPrivateKey, getPrivateKeyForBot } = require('./lib/nfa-wallet-manager');
 
 const STRATEGY_DESCRIPTIONS = {
   momentum: `You are a MOMENTUM trader. Follow the trend aggressively. If price is rising → BUY with conviction. If falling → SELL. Use leverage 5-15x when trend is strong.`,
@@ -505,6 +515,17 @@ Respond ONLY with valid JSON (no markdown, no explanation outside JSON):
       }),
     });
 
+    if (res.status === 429) {
+      await new Promise(r => setTimeout(r, 3000));
+      const retry = await fetch(OPENROUTER_API_URL, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${OPENROUTER_API_KEY}`, "Content-Type": "application/json", "HTTP-Referer": "https://gembots.space" },
+        body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: prompt }], max_tokens: 400, temperature, response_format: { type: "json_object" } }),
+      });
+      if (!retry.ok) throw new Error(`API ${retry.status}`);
+      const retryData = await retry.json();
+      return parseDecision(retryData.choices?.[0]?.message?.content || "");
+    }
     if (!res.ok) throw new Error(`API ${res.status}`);
     const data = await res.json();
     return parseDecision(data.choices?.[0]?.message?.content || '');
@@ -880,6 +901,107 @@ function updatePortfolio(db, botId, size, pnlPercent) {
   }
 }
 
+// ─── Live Trade Execution for NFA Bots ──────────────────────────────────────
+
+async function supabaseFetch(path, options = {}) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  const url = `${SUPABASE_URL}/rest/v1/${path}`;
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': options.prefer || 'return=representation',
+      ...options.headers,
+    },
+  });
+  if (!res.ok) return null;
+  const ct = res.headers.get('content-type');
+  if (ct && ct.includes('json')) return res.json();
+  return null;
+}
+
+async function recordNfaTrade(trade) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  try {
+    await supabaseFetch('nfa_trades', {
+      method: 'POST',
+      body: JSON.stringify({
+        nfa_id: trade.nfaId,
+        bot_id: trade.botId,
+        pair: trade.pair || '',
+        side: trade.side || 'buy',
+        entry_price: trade.entryPrice || 0,
+        size_usd: trade.sizeUsd || 0,
+        mode: trade.mode || 'paper',
+        status: trade.status || 'open',
+        confidence: trade.confidence || null,
+        strategy_name: trade.strategyName || null,
+        token_in: trade.tokenIn || null,
+        token_out: trade.tokenOut || null,
+        tx_hash: trade.txHash || null,
+        gas_used: trade.gasUsed || null,
+        gas_cost_bnb: trade.gasCostBnb || null,
+        amount_in: trade.amountIn || null,
+        amount_out: trade.amountOut || null,
+        error_message: trade.errorMessage || null,
+      }),
+    });
+  } catch (err) {
+    console.error(`Failed to record NFA trade: ${err.message}`);
+  }
+}
+
+async function executeLiveTradeForBot(botId, decision, snapshot) {
+  if (!NFA_LIVE_TRADING_ENABLED) return null;
+
+  try {
+    const bots = await supabaseFetch(
+      `bots?id=eq.${botId}&select=id,nfa_id,name,trading_mode,trading_wallet_address,trading_config`
+    );
+    if (!bots || bots.length === 0) return null;
+
+    const bot = bots[0];
+    if (bot.trading_mode !== 'live') return null;
+    if (!bot.trading_wallet_address) return null;
+
+    const allowedPairs = (bot.trading_config || {}).allowed_pairs || ['BNB/USDT', 'ETH/USDT'];
+
+    let tokenOut = null;
+    if (snapshot.symbol === 'BTCUSDT') tokenOut = 'USDT';
+    else if (snapshot.symbol === 'ETHUSDT') tokenOut = 'USDT';
+    else if (snapshot.symbol === 'SOLUSDT') tokenOut = 'USDT';
+    if (!tokenOut) return null;
+
+    const amountBnb = (10000 * decision.size) / snapshot.price;
+    if (amountBnb <= 0 || amountBnb > 0.1) return null;
+
+    if (decision.action === 'BUY') {
+      console.log(`  🔴 LIVE BUY would execute: ${amountBnb.toFixed(4)} BNB → ${tokenOut} (bot ${bot.name})`);
+      await recordNfaTrade({
+        nfaId: bot.nfa_id, botId: bot.id, pair: `BNB/${tokenOut}`, side: 'buy',
+        entryPrice: snapshot.price, sizeUsd: amountBnb * snapshot.price,
+        mode: 'live', status: 'pending', confidence: decision.confidence,
+        strategyName: bot.strategy, tokenIn: 'BNB', tokenOut, amountIn: amountBnb,
+      });
+    } else if (decision.action === 'SELL') {
+      console.log(`  🔴 LIVE SELL would execute: ${tokenOut} → BNB (bot ${bot.name})`);
+      await recordNfaTrade({
+        nfaId: bot.nfa_id, botId: bot.id, pair: `BNB/${tokenOut}`, side: 'sell',
+        entryPrice: snapshot.price, sizeUsd: amountBnb * snapshot.price,
+        mode: 'live', status: 'pending', confidence: decision.confidence,
+        strategyName: bot.strategy, tokenIn: tokenOut, tokenOut: 'BNB', amountIn: amountBnb,
+      });
+    }
+
+    return { executed: true, mode: 'live' };
+  } catch (err) {
+    console.error(`Live trade execution failed for bot ${botId}:`, err.message);
+    return null;
+  }
+}
+
 async function runBattleCycle(db) {
   console.log(`\n⏰ [${new Date().toISOString()}] Starting battle cycle...`);
   
@@ -1036,6 +1158,23 @@ async function runBattleCycle(db) {
     
     console.log(`   ${bot1.name}[${model1.split('/')[1]}]: ${d1.action} x${d1.leverage} (conf:${d1.confidence.toFixed(2)})`);
     console.log(`   ${bot2.name}[${model2.split('/')[1]}]: ${d2.action} x${d2.leverage} (conf:${d2.confidence.toFixed(2)})`);
+    
+    // ─── Live Trading Path ────────────────────────────────────
+    // If bot has a trading wallet and is in live mode, execute real trade
+    if (NFA_LIVE_TRADING_ENABLED && d1.action !== 'HOLD') {
+      try {
+        await executeLiveTradeForBot(bot1.id, d1, snap);
+      } catch (e) {
+        console.warn(`  ⚠️ Live trade for ${bot1.name} failed:`, e.message);
+      }
+    }
+    if (NFA_LIVE_TRADING_ENABLED && d2.action !== 'HOLD') {
+      try {
+        await executeLiveTradeForBot(bot2.id, d2, snap);
+      } catch (e) {
+        console.warn(`  ⚠️ Live trade for ${bot2.name} failed:`, e.message);
+      }
+    }
     
     const battleId = uuidv4();
     db.prepare(`

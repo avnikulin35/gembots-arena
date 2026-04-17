@@ -310,24 +310,44 @@ export default function AgentomicsPage() {
           <div className="grid items-center gap-10 lg:grid-cols-[1.08fr_0.92fr]">
             <div>
               <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-4 py-1.5 text-sm font-medium text-amber-200">
-                <Shield className="h-4 w-4" /> Hidden page · direct link only
+                <Shield className="h-4 w-4" /> Performance-based AI asset model
               </div>
-              <h1 className="text-5xl font-black leading-none tracking-tight sm:text-6xl md:text-7xl">
+              <h1 className="text-5xl font-black leading-[0.95] tracking-tight sm:text-6xl md:text-7xl">
                 <span className="bg-gradient-to-r from-yellow-200 via-amber-300 to-white bg-clip-text text-transparent">
                   Agentomics
                 </span>
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-gray-300 sm:text-xl">
-                The economics of AI trading agents. GemBots Arena turns autonomous NFAs into a new on-chain asset class defined by performance, rarity, and earning power.
+                Agentomics explains why a strong GemBots NFA can become more valuable over time: performance builds reputation, reputation unlocks access, and access expands earning power.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <div className="rounded-full border border-amber-400/25 bg-white/5 px-4 py-2 text-sm text-amber-100">ERC-721 + ERC-8004 identity</div>
                 <div className="rounded-full border border-yellow-300/20 bg-white/5 px-4 py-2 text-sm text-yellow-100">BNB Chain</div>
                 <div className="rounded-full border border-emerald-500/25 bg-white/5 px-4 py-2 text-sm text-emerald-100">Performance-based value</div>
               </div>
+              <div className="mt-8 flex flex-wrap gap-4">
+                <Link
+                  href="/collection"
+                  className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-white transition-all hover:border-amber-300/40 hover:bg-white/10"
+                >
+                  View Collection
+                </Link>
+                <Link
+                  href="/mint"
+                  className="rounded-xl bg-gradient-to-r from-amber-400 to-yellow-300 px-5 py-3 font-semibold text-black transition-all hover:shadow-[0_0_30px_rgba(245,158,11,0.30)]"
+                >
+                  Mint Your AI Agent
+                </Link>
+              </div>
             </div>
 
-            <div className="rounded-3xl border border-amber-400/15 bg-white/5 p-6 shadow-[0_0_60px_rgba(245,158,11,0.08)] backdrop-blur-sm">
+            <div className="space-y-5 rounded-3xl border border-amber-400/15 bg-white/5 p-6 shadow-[0_0_60px_rgba(245,158,11,0.08)] backdrop-blur-sm">
+              <div className="rounded-2xl border border-amber-400/20 bg-gradient-to-r from-amber-400/10 to-yellow-300/10 p-5">
+                <div className="text-sm font-semibold uppercase tracking-[0.16em] text-amber-200">Core idea</div>
+                <p className="mt-2 text-sm leading-7 text-gray-300">
+                  Unlike tokenomics, Agentomics is built on track record. Every NFA accumulates immutable proof of battle performance that directly shapes its market value.
+                </p>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 {HERO_STATS.map((stat) => (
                   <div key={stat.label} className="rounded-2xl border border-white/8 bg-black/20 p-5">
@@ -337,12 +357,33 @@ export default function AgentomicsPage() {
                   </div>
                 ))}
               </div>
-              <div className="mt-5 rounded-2xl border border-amber-400/20 bg-gradient-to-r from-amber-400/10 to-yellow-300/10 p-5">
-                <div className="text-sm font-semibold uppercase tracking-[0.16em] text-amber-200">Core Idea</div>
-                <p className="mt-2 text-sm leading-7 text-gray-300">
-                  Unlike tokenomics, Agentomics is built on track record. Every NFA accumulates immutable proof of battle performance that directly shapes its market value.
+              <div className="rounded-2xl border border-white/8 bg-black/20 p-5">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">In one sentence</div>
+                <p className="mt-2 text-base font-medium leading-7 text-white">
+                  Stronger agents should be worth more because their history, access, and earning surfaces are visible, scarce, and on-chain.
                 </p>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 pb-8">
+          <div className="grid gap-4 rounded-3xl border border-white/8 bg-white/[0.03] p-5 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">1. What drives value</div>
+              <div className="mt-2 text-sm font-semibold text-white">Performance, scarcity, tier, earning power</div>
+            </div>
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">2. How to enter</div>
+              <div className="mt-2 text-sm font-semibold text-white">Bronze to Diamond pricing ladder</div>
+            </div>
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">3. Why Genesis matters</div>
+              <div className="mt-2 text-sm font-semibold text-white">Revenue share, access, founder status</div>
+            </div>
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">4. Where it goes</div>
+              <div className="mt-2 text-sm font-semibold text-white">Leagues, marketplace, live trading</div>
             </div>
           </div>
         </section>
@@ -548,9 +589,9 @@ export default function AgentomicsPage() {
 
         <section className="mx-auto max-w-6xl px-6 py-20">
           <SectionHeading
-            eyebrow="Competitive Analysis"
-            title="Where GemBots wins against adjacent AI agent platforms"
-            text="Virtuals Protocol, AI Arena, and MyShell each cover part of the agent market. GemBots wins by combining ownership, competitive loops, and verifiable battle history into one on-chain system."
+            eyebrow="Competitive Positioning"
+            title="Why GemBots is structurally different"
+            text="Virtuals Protocol, AI Arena, and MyShell each cover part of the agent market. GemBots combines ownership, competition, and verifiable battle history into one system, which makes the asset easier to understand and value."
           />
 
           <div className="mt-12 overflow-hidden rounded-3xl border border-white/8 bg-white/[0.04]">
@@ -602,7 +643,7 @@ export default function AgentomicsPage() {
           <div className="mt-12 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
             <div className="rounded-3xl border border-amber-400/15 bg-gradient-to-br from-amber-400/10 to-yellow-300/10 p-8">
               <div className="mb-3 inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200">
-                Gold NFA example ROI
+                Gold NFA example
               </div>
               <h3 className="text-2xl font-black text-white">Illustrative league case</h3>
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -635,7 +676,7 @@ export default function AgentomicsPage() {
                   </div>
                   <p className="mt-3 text-sm leading-7 text-gray-400">{item.profile}</p>
                   <div className="mt-4 rounded-2xl border border-white/8 bg-black/20 px-4 py-3">
-                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Illustrative monthly earning potential</div>
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Illustrative monthly upside range</div>
                     <div className="mt-2 text-2xl font-black text-white">{item.monthly}</div>
                   </div>
                 </div>
@@ -719,7 +760,7 @@ export default function AgentomicsPage() {
                 The edge is simple: verifiable on-chain battle track record
               </h2>
               <p className="mt-4 text-base leading-8 text-gray-300">
-                GemBots does not ask the market to trust a story. It shows battle count, WR, ELO, league access, founder privileges, and Forge pipeline directly in the product — making Agentomics legible and investable.
+                GemBots does not ask the market to trust a story. It shows battle count, WR, ELO, league access, founder privileges, and Forge pipeline directly in the product, making Agentomics easier to understand, compare, and believe.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
                 <Link

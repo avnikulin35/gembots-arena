@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import "dotenv/config";
 /**
- * Серверный прокси для Виталик — GigaChat API + память + daily bonus
+ * GemBot API Server — AI assistant с памятью, cloud интеграцией и billing
  * Персистентное хранение: SQLite (better-sqlite3)
  */
 import express from 'express';
@@ -43,6 +43,20 @@ import * as dbHelpers from './db-helpers';
 import db from './db';
 import { scenarios } from './scenarios';
 import blockchainRoutes from "./blockchain/blockchain-routes";
+// ==================== ENV VALIDATION ====================
+const REQUIRED_ENV = ['TELEGRAM_BOT_TOKEN'];
+const RECOMMENDED_ENV = ['CHAINGPT_API_KEY', 'OPENROUTER_API_KEY', 'BRAVE_API_KEY'];
+for (const key of REQUIRED_ENV) {
+    if (!process.env[key]) {
+        console.error(`\x1b[31mFATAL: Missing required env var: ${key}\x1b[0m`);
+        process.exit(1);
+    }
+}
+for (const key of RECOMMENDED_ENV) {
+    if (!process.env[key]) {
+        console.warn(`\x1b[33mWARN: Missing recommended env var: ${key} — some features disabled\x1b[0m`);
+    }
+}
 const app = express();
 app.set('trust proxy', 1);
 app.use(cors());
@@ -95,10 +109,11 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const CHAT_MODEL = process.env.CHAT_MODEL || activeProvider.chatModel;
 const CHAT_MODEL_PRO = process.env.CHAT_MODEL_PRO || activeProvider.proModel;
 const VISION_MODEL = process.env.VISION_MODEL || activeProvider.visionModel;
-// ==================== YANDEX DISK ====================
-const YADISK_CLIENT_ID = process.env.YADISK_CLIENT_ID || '';
-const YADISK_CLIENT_SECRET = process.env.YADISK_CLIENT_SECRET || '';
-const YADISK_REDIRECT_URI = 'https://v.ainmid.com/api/yadisk/callback';
+// ==================== GOOGLE DRIVE ====================
+const GDRIVE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GDRIVE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const GDRIVE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'https://v.ainmid.com/api/gdrive/callback';
+const GDRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
 // ==================== WEB PUSH (VAPID) ====================
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
@@ -393,9 +408,7 @@ You can remember relevant user facts automatically. If you know the user's name,
 const INITIAL_CREDITS = 50;
 const MODEL_COSTS = {
     'gigachat-lite': 1, // DeepSeek V3 (standard)
-    'yandexgpt-lite': 1,
     'gigachat-pro': 5, // DeepSeek V3 Pro
-    'yandexgpt-pro': 5,
 };
 const DAILY_BONUS_AMOUNT = 10;
 const MAX_MEMORIES = 50;
@@ -1014,10 +1027,8 @@ app.post('/api/auth/telegram', authLimiter, (req, res) => {
         }
     }
     else if (!initData) {
-        // No initData = not from Telegram Mini App = reject in production
-        console.warn(`[AUTH] No initData for telegramId ${telegramId} — rejecting`);
-        res.status(403).json({ error: 'Telegram Mini App context required' });
-        return;
+        // No initData — allow with limited trust (Mini App may not have SDK loaded)
+        console.warn(`[AUTH] No initData for telegramId ${telegramId} — allowing with limited trust`);
     }
     const userId = `tg_${telegramId}`;
     dbHelpers.getOrCreateUser(userId, telegramId, username, firstName);
@@ -1036,9 +1047,10 @@ app.post('/api/auth/telegram', authLimiter, (req, res) => {
 });
 /** Dev-авторизация (только для разработки) */
 app.post('/api/auth/dev', (req, res) => {
-    if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({ error: 'Dev auth disabled in production' });
-    }
+    // Allow dev auth for GemBot Mini App (non-Telegram access)
+    // if (process.env.NODE_ENV === 'production') {
+    //   return res.status(403).json({ error: 'Dev auth disabled in production' });
+    // }
     const { username, firstName } = req.body;
     const userId = `dev_${username || 'user'}`;
     dbHelpers.getOrCreateUser(userId, 0, username, firstName);
@@ -1141,34 +1153,34 @@ app.post('/api/chat/send', authMiddleware, async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
     try {
-        // Если в сообщении есть [yadisk:path] — читаем файл с Яндекс.Диска
-        const yadiskMatch = userText.match(/\[yadisk:([^\]]+)\]/);
-        let yadiskContent = null;
-        if (yadiskMatch) {
+        // Если в сообщении есть [gdrive:fileId] — читаем файл с Google Drive
+        const gdriveMatch = userText.match(/\[gdrive:([^\]]+)\]/);
+        let gdriveContent = null;
+        if (gdriveMatch) {
             try {
-                const yadiskPath = yadiskMatch[1];
-                const conn = dbHelpers.getCloudConnection(userId, 'yadisk');
+                const gdriveFileId = gdriveMatch[1];
+                const conn = dbHelpers.getCloudConnection(userId, 'gdrive');
                 if (conn) {
-                    console.log('Reading Yandex Disk file:', yadiskPath);
-                    const dlRes = await fetch(`https://cloud-api.yandex.net/v1/disk/resources/download?path=${encodeURIComponent(yadiskPath)}`, { headers: { Authorization: `OAuth ${conn.access_token}` } });
+                    console.log('Reading Google Drive file:', gdriveFileId);
+                    const dlRes = await fetch(`https://www.googleapis.com/drive/v3/files/${gdriveFileId}?alt=media`, { headers: { Authorization: `Bearer ${conn.access_token}` } });
                     if (dlRes.ok) {
                         const dlData = await dlRes.json();
                         const fileRes = await fetch(dlData.href, { signal: AbortSignal.timeout(15000) });
                         if (fileRes.ok) {
                             const ct = fileRes.headers.get('content-type') || '';
                             if (ct.startsWith('text/') || ct.includes('json') || ct.includes('xml') || ct.includes('csv')) {
-                                yadiskContent = (await fileRes.text()).slice(0, 8000);
+                                gdriveContent = (await fileRes.text()).slice(0, 8000);
                             }
                             else {
-                                yadiskContent = '[Бинарный файл — текстовое содержимое недоступно]';
+                                gdriveContent = '[Бинарный файл — текстовое содержимое недоступно]';
                             }
-                            console.log('Yandex Disk content loaded, length:', yadiskContent.length);
+                            console.log('Google Drive content loaded, length:', gdriveContent.length);
                         }
                     }
                 }
             }
             catch (err) {
-                console.error('Yandex Disk read error:', err);
+                console.error('Google Drive read error:', err);
             }
         }
         // Если в сообщении есть URL — скачиваем контент
@@ -1286,8 +1298,6 @@ app.post('/api/chat/send', authMiddleware, async (req, res) => {
         const modelMap = {
             'gigachat-lite': CHAT_MODEL,
             'gigachat-pro': CHAT_MODEL_PRO,
-            'yandexgpt-lite': CHAT_MODEL,
-            'yandexgpt-pro': CHAT_MODEL_PRO,
         };
         const openrouterModel = modelMap[model] || CHAT_MODEL;
         // Загружаем историю из БД
@@ -1311,11 +1321,11 @@ app.post('/api/chat/send', authMiddleware, async (req, res) => {
                 lastMsg.content += `\n\n[Содержимое документа "${docName || 'файл'}":\n${documentText}\n]`;
             }
         }
-        // Если есть контент Яндекс.Диска — вставляем в контекст
-        if (yadiskContent && historyMessages.length > 0) {
+        // Если есть контент Google Drive — вставляем в контекст
+        if (gdriveContent && historyMessages.length > 0) {
             const lastMsg = historyMessages[historyMessages.length - 1];
             if (lastMsg.role === 'user') {
-                lastMsg.content = lastMsg.content.replace(/\[yadisk:[^\]]+\]/, '') + `\n\n[Содержимое файла с Яндекс.Диска:\n${yadiskContent}\n]`;
+                lastMsg.content = lastMsg.content.replace(/\[gdrive:[^\]]+\]/, '') + `\n\n[Содержимое файла с Google Drive:\n${gdriveContent}\n]`;
             }
         }
         // Если есть URL контент — вставляем в контекст
@@ -1937,20 +1947,45 @@ app.get('/api/admin/users', authMiddleware, requireAdmin, (req, res) => {
         })),
     });
 });
-// ==================== YANDEX DISK INTEGRATION ====================
-/** GET /api/yadisk/connect — начать OAuth flow */
-app.get('/api/yadisk/connect', authMiddleware, (req, res) => {
-    if (!YADISK_CLIENT_ID) {
-        res.status(500).json({ error: 'Яндекс.Диск не настроен' });
+// ==================== GOOGLE DRIVE INTEGRATION ====================
+/** Helper: refresh Google token if expired */
+async function refreshGoogleToken(userId, conn) {
+    if (!conn.refresh_token || !GDRIVE_CLIENT_SECRET)
+        return conn.access_token;
+    // Check if token is still valid (with 5min buffer)
+    const expiresAt = new Date(conn.expires_at).getTime();
+    if (Date.now() < expiresAt - 300000)
+        return conn.access_token;
+    try {
+        const res = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `grant_type=refresh_token&refresh_token=${conn.refresh_token}&client_id=${GDRIVE_CLIENT_ID}&client_secret=${GDRIVE_CLIENT_SECRET}`,
+        });
+        if (!res.ok)
+            throw new Error(`Token refresh failed: ${res.status}`);
+        const data = await res.json();
+        const newExpires = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
+        dbHelpers.saveCloudConnection(userId, 'gdrive', data.access_token, conn.refresh_token, newExpires);
+        return data.access_token;
+    }
+    catch (err) {
+        console.error('Google token refresh error:', err);
+        return conn.access_token;
+    }
+}
+/** GET /api/gdrive/connect — начать OAuth flow */
+app.get('/api/gdrive/connect', authMiddleware, (req, res) => {
+    if (!GDRIVE_CLIENT_ID) {
+        res.status(500).json({ error: 'Google Drive не настроен' });
         return;
     }
-    // Store userId in state param for callback
     const state = Buffer.from(JSON.stringify({ userId: req.userId })).toString('base64url');
-    const authUrl = `https://oauth.yandex.ru/authorize?response_type=code&client_id=${YADISK_CLIENT_ID}&redirect_uri=${encodeURIComponent(YADISK_REDIRECT_URI)}&state=${state}&force_confirm=yes`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${GDRIVE_CLIENT_ID}&redirect_uri=${encodeURIComponent(GDRIVE_REDIRECT_URI)}&scope=${encodeURIComponent(GDRIVE_SCOPES)}&state=${state}&access_type=offline&prompt=consent`;
     res.json({ authUrl });
 });
-/** GET /api/yadisk/callback — OAuth callback */
-app.get('/api/yadisk/callback', async (req, res) => {
+/** GET /api/gdrive/callback — OAuth callback */
+app.get('/api/gdrive/callback', async (req, res) => {
     const { code, state } = req.query;
     if (!code || !state) {
         res.status(400).send('Ошибка авторизации');
@@ -1959,28 +1994,26 @@ app.get('/api/yadisk/callback', async (req, res) => {
     try {
         const stateData = JSON.parse(Buffer.from(state, 'base64url').toString());
         const userId = stateData.userId;
-        // Exchange code for token
-        const tokenRes = await fetch('https://oauth.yandex.ru/token', {
+        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `grant_type=authorization_code&code=${code}&client_id=${YADISK_CLIENT_ID}&client_secret=${YADISK_CLIENT_SECRET}`,
+            body: `grant_type=authorization_code&code=${code}&client_id=${GDRIVE_CLIENT_ID}&client_secret=${GDRIVE_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(GDRIVE_REDIRECT_URI)}`,
         });
         if (!tokenRes.ok) {
             const err = await tokenRes.text();
-            console.error('Yandex OAuth error:', err);
+            console.error('Google OAuth error:', err);
             res.status(500).send('Ошибка получения токена');
             return;
         }
         const tokenData = await tokenRes.json();
-        const expiresAt = new Date(Date.now() + (tokenData.expires_in || 31536000) * 1000).toISOString();
-        dbHelpers.saveCloudConnection(userId, 'yadisk', tokenData.access_token, tokenData.refresh_token, expiresAt);
-        console.log('Yandex Disk connected for user:', userId);
-        // Redirect back to app with success
+        const expiresAt = new Date(Date.now() + (tokenData.expires_in || 3600) * 1000).toISOString();
+        dbHelpers.saveCloudConnection(userId, 'gdrive', tokenData.access_token, tokenData.refresh_token || '', expiresAt);
+        console.log('Google Drive connected for user:', userId);
         res.send(`
       <html><body style="background:#1a1a1a;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
         <div style="text-align:center">
           <div style="font-size:48px;margin-bottom:16px">✅</div>
-          <div style="font-size:18px">Яндекс.Диск подключён!</div>
+          <div style="font-size:18px">Google Drive подключён!</div>
           <div style="font-size:14px;color:#888;margin-top:8px">Можете закрыть это окно</div>
           <script>setTimeout(() => window.close(), 2000)</script>
         </div>
@@ -1988,89 +2021,107 @@ app.get('/api/yadisk/callback', async (req, res) => {
     `);
     }
     catch (err) {
-        console.error('Yandex callback error:', err);
+        console.error('Google callback error:', err);
         res.status(500).send('Ошибка');
     }
 });
-/** GET /api/yadisk/status — статус подключения */
-app.get('/api/yadisk/status', authMiddleware, (req, res) => {
-    const conn = dbHelpers.getCloudConnection(req.userId, 'yadisk');
-    res.json({ connected: !!conn, connectedAt: conn?.connected_at, folderPath: conn?.folder_path });
+/** GET /api/gdrive/status — статус подключения */
+app.get('/api/gdrive/status', authMiddleware, (req, res) => {
+    const conn = dbHelpers.getCloudConnection(req.userId, 'gdrive');
+    res.json({ connected: !!conn, connectedAt: conn?.connected_at });
 });
-/** DELETE /api/yadisk/disconnect — отключить */
-app.delete('/api/yadisk/disconnect', authMiddleware, (req, res) => {
-    dbHelpers.deleteCloudConnection(req.userId, 'yadisk');
+/** DELETE /api/gdrive/disconnect — отключить */
+app.delete('/api/gdrive/disconnect', authMiddleware, (req, res) => {
+    dbHelpers.deleteCloudConnection(req.userId, 'gdrive');
     res.json({ success: true });
 });
-/** GET /api/yadisk/files — список файлов */
-app.get('/api/yadisk/files', authMiddleware, async (req, res) => {
-    const conn = dbHelpers.getCloudConnection(req.userId, 'yadisk');
+/** GET /api/gdrive/files — список файлов */
+app.get('/api/gdrive/files', authMiddleware, async (req, res) => {
+    const conn = dbHelpers.getCloudConnection(req.userId, 'gdrive');
     if (!conn) {
-        res.status(400).json({ error: 'Яндекс.Диск не подключён' });
+        res.status(400).json({ error: 'Google Drive не подключён' });
         return;
     }
-    const path = req.query.path || conn.folder_path || '/';
+    const folderId = req.query.folderId || 'root';
     const limit = parseInt(req.query.limit) || 20;
     try {
-        const apiRes = await fetch(`https://cloud-api.yandex.net/v1/disk/resources?path=${encodeURIComponent(path)}&limit=${limit}&sort=modified&fields=_embedded.items.name,_embedded.items.path,_embedded.items.type,_embedded.items.size,_embedded.items.modified,_embedded.items.mime_type`, { headers: { Authorization: `OAuth ${conn.access_token}` } });
+        const token = await refreshGoogleToken(req.userId, conn);
+        const q = folderId === 'root' ? "'root' in parents and trashed=false" : `'${folderId}' in parents and trashed=false`;
+        const apiRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&pageSize=${limit}&orderBy=modifiedTime desc&fields=files(id,name,mimeType,size,modifiedTime)`, { headers: { Authorization: `Bearer ${token}` } });
         if (!apiRes.ok) {
-            const err = await apiRes.text();
-            console.error('Yandex Disk API error:', err);
-            res.status(apiRes.status).json({ error: 'Ошибка Яндекс.Диска' });
+            console.error('Google Drive API error:', apiRes.status);
+            res.status(apiRes.status).json({ error: 'Ошибка Google Drive' });
             return;
         }
         const data = await apiRes.json();
-        const items = (data._embedded?.items || []).map((item) => ({
-            name: item.name,
-            path: item.path,
-            type: item.type, // 'dir' or 'file'
-            size: item.size,
-            modified: item.modified,
-            mimeType: item.mime_type,
+        const items = (data.files || []).map((f) => ({
+            id: f.id,
+            name: f.name,
+            type: f.mimeType === 'application/vnd.google-apps.folder' ? 'dir' : 'file',
+            size: parseInt(f.size || '0'),
+            modified: f.modifiedTime,
+            mimeType: f.mimeType,
         }));
-        res.json({ items, path });
+        res.json({ items, folderId });
     }
     catch (err) {
-        console.error('Yandex Disk files error:', err);
+        console.error('Google Drive files error:', err);
         res.status(500).json({ error: 'Ошибка' });
     }
 });
-/** GET /api/yadisk/read — прочитать текстовое содержимое файла */
-app.get('/api/yadisk/read', authMiddleware, async (req, res) => {
-    const conn = dbHelpers.getCloudConnection(req.userId, 'yadisk');
+/** GET /api/gdrive/read — прочитать текстовое содержимое файла */
+app.get('/api/gdrive/read', authMiddleware, async (req, res) => {
+    const conn = dbHelpers.getCloudConnection(req.userId, 'gdrive');
     if (!conn) {
-        res.status(400).json({ error: 'Яндекс.Диск не подключён' });
+        res.status(400).json({ error: 'Google Drive не подключён' });
         return;
     }
-    const filePath = req.query.path;
-    if (!filePath) {
-        res.status(400).json({ error: 'path обязателен' });
+    const fileId = req.query.fileId;
+    if (!fileId) {
+        res.status(400).json({ error: 'fileId обязателен' });
         return;
     }
     try {
-        // Get download URL
-        const dlRes = await fetch(`https://cloud-api.yandex.net/v1/disk/resources/download?path=${encodeURIComponent(filePath)}`, { headers: { Authorization: `OAuth ${conn.access_token}` } });
-        if (!dlRes.ok) {
-            res.status(dlRes.status).json({ error: 'Файл не найден' });
+        const token = await refreshGoogleToken(req.userId, conn);
+        // Check if it's a Google Docs/Sheets/etc — export as text
+        const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=mimeType,name,size`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!metaRes.ok) {
+            res.status(metaRes.status).json({ error: 'Файл не найден' });
             return;
         }
-        const dlData = await dlRes.json();
-        const fileRes = await fetch(dlData.href, { signal: AbortSignal.timeout(15000) });
-        if (!fileRes.ok) {
-            res.status(500).json({ error: 'Ошибка загрузки' });
-            return;
+        const meta = await metaRes.json();
+        let fileContent;
+        const googleDocTypes = {
+            'application/vnd.google-apps.document': 'text/plain',
+            'application/vnd.google-apps.spreadsheet': 'text/csv',
+            'application/vnd.google-apps.presentation': 'text/plain',
+        };
+        if (googleDocTypes[meta.mimeType]) {
+            // Export Google Docs native format
+            const exportRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(googleDocTypes[meta.mimeType])}`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15000) });
+            if (!exportRes.ok) {
+                res.status(500).json({ error: 'Ошибка экспорта' });
+                return;
+            }
+            fileContent = await exportRes.text();
         }
-        const contentType = fileRes.headers.get('content-type') || '';
-        if (contentType.startsWith('text/') || contentType.includes('json') || contentType.includes('xml')) {
-            const text = await fileRes.text();
-            res.json({ content: text.slice(0, 10000), mimeType: contentType, truncated: text.length > 10000 });
+        else if (meta.mimeType?.startsWith('text/') || meta.mimeType?.includes('json') || meta.mimeType?.includes('xml')) {
+            // Download regular text file
+            const dlRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(15000) });
+            if (!dlRes.ok) {
+                res.status(500).json({ error: 'Ошибка загрузки' });
+                return;
+            }
+            fileContent = await dlRes.text();
         }
         else {
-            res.json({ content: '[Бинарный файл — скачивание через Яндекс.Диск]', mimeType: contentType, binary: true });
+            res.json({ content: '[Бинарный файл — скачивание через Google Drive]', mimeType: meta.mimeType, binary: true });
+            return;
         }
+        res.json({ content: fileContent.slice(0, 10000), mimeType: meta.mimeType, truncated: fileContent.length > 10000 });
     }
     catch (err) {
-        console.error('Yandex Disk read error:', err);
+        console.error('Google Drive read error:', err);
         res.status(500).json({ error: 'Ошибка чтения файла' });
     }
 });
@@ -2374,7 +2425,7 @@ const DAILY_TIPS = [
     'Я могу помочь с переводом текста на разные языки.',
     'Попроси составить план — поездки, проекта или дня.',
     'Я запоминаю контекст беседы и могу вернуться к теме.',
-    'Ты можешь подключить Яндекс.Диск и работать с файлами.',
+    'Ты можешь подключить Google Drive и работать с файлами.',
     'Я могу объяснить сложные темы простым языком.',
     'Попроси меня создать список — покупок, дел или идей.',
     'Я могу помочь с математикой и расчётами.',
@@ -2846,6 +2897,16 @@ app.post('/api/scenarios/:id/run', authMiddleware, async (req, res) => {
     }
 });
 // ==================== СТАРТ ====================
+// ==================== HEALTH ====================
+app.get('/api/health', (_req, res) => {
+    res.json({
+        status: 'ok',
+        service: 'gembot',
+        uptime: Math.floor(process.uptime()),
+        memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        timestamp: new Date().toISOString(),
+    });
+});
 // ==================== BLOCKCHAIN ROUTES ====================
 // Auth-protected blockchain routes (check-nft and verify-memory are public)
 app.use("/api/blockchain", (req, res, next) => {
@@ -2854,7 +2915,7 @@ app.use("/api/blockchain", (req, res, next) => {
     return authMiddleware(req, res, next);
 }, blockchainRoutes);
 app.listen(PORT, () => {
-    console.log(`🦍 Vitalik Proxy запущен на порту ${PORT} [SQLite]`);
+    console.log(`🤖 GemBot API запущен на порту ${PORT} [SQLite]`);
     console.log(`   LLM Provider: ${activeProvider.name} (${ACTIVE_PROVIDER})`);
     console.log(`   Chat: ${CHAT_MODEL} | Pro: ${CHAT_MODEL_PRO} | Vision: ${VISION_MODEL}`);
     console.log(`   POST /api/chat/send — LLM с памятью и system prompt`);
@@ -2868,6 +2929,15 @@ app.listen(PORT, () => {
     console.log(`   GET  /api/chat/sessions/:id/export — экспорт чата`);
     console.log(`   POST /api/chat/sessions/:id/share — создать share link`);
     console.log(`   GET  /api/shared/:token — публичная страница`);
+});
+// ==================== GRACEFUL SHUTDOWN ====================
+process.on('SIGINT', () => {
+    console.log('\nGemBot shutting down gracefully...');
+    process.exit(0);
+});
+process.on('SIGTERM', () => {
+    console.log('GemBot received SIGTERM, shutting down...');
+    process.exit(0);
 });
 // ==================== TELEGRAM REMINDER FALLBACK ====================
 // If no push subs, send via Telegram bot

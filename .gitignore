@@ -116,8 +116,12 @@ bot/users.json
 bot/*.bak*
 proxy.ts
 
+# Local AI / editor state
+.codex
+
 # Backups
 *.bak
+*.bak-*
 .trash/
 
 # Solana

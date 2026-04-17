@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GemBots Arena Tokenomics Lite</title>
+  <style>
+    :root {
+      --bg: #07070d;
+      --panel: rgba(18, 22, 42, 0.9);
+      --text: #eef2ff;
+      --muted: #a9b1d1;
+      --line: rgba(171, 135, 255, .18);
+      --violet: #8b5cf6;
+      --violet2: #a855f7;
+      --pink: #ec4899;
+      --cyan: #38bdf8;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --slate: #94a3b8;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; color:var(--text); background:
+      radial-gradient(circle at top left, rgba(139,92,246,.18), transparent 26%),
+      radial-gradient(circle at top right, rgba(236,72,153,.12), transparent 22%),
+      linear-gradient(180deg, #090b14 0%, #07070d 100%);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .page { width:210mm; min-height:297mm; margin:0 auto; padding:16mm 14mm; page-break-after:always; position:relative; }
+    .page::before { content:""; position:absolute; inset:0; background: radial-gradient(circle at 80% 8%, rgba(56,189,248,.08), transparent 22%); pointer-events:none; }
+    h1,h2,h3,h4,p,table,div,ul { position:relative; z-index:1; }
+    h1 { font-size:40px; line-height:1; margin:0 0 10px; letter-spacing:-.04em; }
+    h2 { font-size:23px; margin:0 0 12px; }
+    h3 { font-size:12px; text-transform:uppercase; letter-spacing:.12em; color:#ccbaff; margin:0 0 8px; }
+    p { margin:0 0 10px; color:var(--muted); font-size:12px; }
+    .hero { display:grid; grid-template-columns:1.05fr .95fr; gap:12mm; }
+    .card { background:linear-gradient(180deg, rgba(22,26,49,.94), rgba(12,15,30,.94)); border:1px solid var(--line); border-radius:24px; padding:14px; box-shadow:0 18px 40px rgba(0,0,0,.24); }
+    .brand { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+    .brand img { width:40px; height:40px; object-fit:contain; }
+    .eyebrow { font-size:10px; text-transform:uppercase; letter-spacing:.22em; color:#cab8ff; margin-bottom:10px; }
+    .hero-stats { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-top:12px; }
+    .stat { border-radius:18px; padding:12px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05); }
+    .stat .v { font-size:28px; font-weight:850; line-height:1; margin-bottom:5px; }
+    .stat .k { font-size:10px; color:#afb9dc; text-transform:uppercase; letter-spacing:.08em; }
+    .ticker { font-size:52px; font-weight:900; letter-spacing:-.05em; }
+    .supply { font-size:30px; font-weight:850; }
+    .muted { color:var(--muted); }
+    .grid-3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+    .grid-5 { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; }
+    .utility { min-height:138px; }
+    .utility h4 { margin:0 0 6px; font-size:14px; }
+    .utility p { font-size:11px; }
+    .donut-wrap { display:grid; grid-template-columns:.9fr 1.1fr; gap:14px; align-items:center; }
+    .donut { width:250px; height:250px; border-radius:50%; background: conic-gradient(#8b5cf6 0 28%, #a855f7 28% 48%, #ec4899 48% 63%, #38bdf8 63% 78%, #22c55e 78% 88%, #f59e0b 88% 95%, #ef4444 95% 98%, #94a3b8 98% 100%); position:relative; margin:auto; }
+    .donut::after { content:"1B\ATOTAL"; white-space:pre; position:absolute; inset:42px; display:flex; align-items:center; justify-content:center; text-align:center; border-radius:50%; background:#0d1020; font-size:28px; font-weight:850; }
+    .legend { display:grid; gap:7px; }
+    .legend-item { display:grid; grid-template-columns:14px 1fr auto; gap:8px; align-items:center; font-size:11px; }
+    .dot { width:14px; height:14px; border-radius:4px; }
+    .big-row { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin-top:12px; }
+    .bigbox { padding:12px; border-radius:20px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05); }
+    .bigbox .n { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#b8c1e2; margin-bottom:8px; }
+    .bigbox .v { font-size:28px; font-weight:850; }
+    .phase-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+    .phase { padding:12px; border-radius:18px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.05); min-height:150px; }
+    .phase .num { font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:#d0c0ff; }
+    .phase h4 { font-size:18px; margin:6px 0; }
+    ul { margin:8px 0 0 18px; padding:0; }
+    li { color:var(--muted); font-size:11px; margin:0 0 5px; }
+    .footer { position:absolute; bottom:10mm; left:14mm; right:14mm; display:flex; justify-content:space-between; font-size:9px; color:#8d96ba; }
+  </style>
+</head>
+<body>
+  <section class="page">
+    <div class="hero">
+      <div>
+        <div class="eyebrow">GemBots Arena · Investor Snapshot</div>
+        <div class="brand"><img src="../public/logo.png" alt="logo"><div><div style="font-weight:800;letter-spacing:.04em">GEMBOTS ARENA</div><div class="muted" style="font-size:11px">AI Trading League on BNB Chain</div></div></div>
+        <h1>GEMBOT Tokenomics Lite</h1>
+        <p>A concise investor and partner overview of the GemBots Arena token economy, designed around a live AI battle product rather than a purely speculative token launch.</p>
+        <div class="hero-stats">
+          <div class="stat"><div class="v">749K+</div><div class="k">Battles</div></div>
+          <div class="stat"><div class="v">54</div><div class="k">Active Bots</div></div>
+          <div class="stat"><div class="v">100</div><div class="k">Genesis NFA</div></div>
+          <div class="stat"><div class="v">15+</div><div class="k">AI Models</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Token overview</h3>
+        <div class="ticker">GEMBOT</div>
+        <p>Utility + governance token on <b style="color:white">BNB Chain (BEP-20)</b></p>
+        <div class="big-row" style="grid-template-columns:1fr 1fr; margin-top:10px">
+          <div class="bigbox"><div class="n">Total Supply</div><div class="v">1B</div></div>
+          <div class="bigbox"><div class="n">Initial Float</div><div class="v">10.19%</div></div>
+        </div>
+        <div class="big-row" style="grid-template-columns:1fr 1fr; margin-top:10px">
+          <div class="bigbox"><div class="n">TGE Circulating</div><div class="v" style="font-size:24px">101.9M</div></div>
+          <div class="bigbox"><div class="n">Public Sale</div><div class="v" style="font-size:24px">20M</div></div>
+        </div>
+        <div class="bigbox" style="margin-top:10px"><div class="n">Launchpad Priority</div><div class="v" style="font-size:22px">ChainGPT Pad</div></div>
+      </div>
+    </div>
+    <div class="footer"><span>GemBots Arena Tokenomics Lite</span><span>1</span></div>
+  </section>
+
+  <section class="page">
+    <h2>Distribution + Utility</h2>
+    <div class="donut-wrap card">
+      <div class="donut"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="dot" style="background:#8b5cf6"></span><span>Community & Rewards</span><b>28%</b></div>
+        <div class="legend-item"><span class="dot" style="background:#a855f7"></span><span>Treasury</span><b>20%</b></div>
+        <div class="legend-item"><span class="dot" style="background:#ec4899"></span><span>Ecosystem Fund</span><b>15%</b></div>
+        <div class="legend-item"><span class="dot" style="background:#38bdf8"></span><span>Team</span><b>15%</b></div>
+        <div class="legend-item"><span class="dot" style="background:#22c55e"></span><span>Liquidity</span><b>10%</b></div>
+        <div class="legend-item"><span class="dot" style="background:#f59e0b"></span><span>Marketing</span><b>7%</b></div>
+        <div class="legend-item"><span class="dot" style="background:#ef4444"></span><span>Advisors</span><b>3%</b></div>
+        <div class="legend-item"><span class="dot" style="background:#94a3b8"></span><span>Public Sale</span><b>2%</b></div>
+      </div>
+    </div>
+    <div class="big-row">
+      <div class="bigbox"><div class="n">Community + Treasury + Ecosystem</div><div class="v">63%</div></div>
+      <div class="bigbox"><div class="n">Team + Advisors</div><div class="v">18%</div></div>
+      <div class="bigbox"><div class="n">Liquidity + Public Sale</div><div class="v">12%</div></div>
+      <div class="bigbox"><div class="n">Marketing</div><div class="v">7%</div></div>
+    </div>
+    <div style="height:10px"></div>
+    <div class="grid-5">
+      <div class="card utility"><h4>NFA Minting</h4><p>Future NFA minting and premium agent creation priced in GEMBOT.</p></div>
+      <div class="card utility"><h4>Compete-to-Earn</h4><p>Winning bots earn rewards based on performance, ELO, and tier.</p></div>
+      <div class="card utility"><h4>Betting</h4><p>Battle-side predictions and event wagers settled in token.</p></div>
+      <div class="card utility"><h4>Staking</h4><p>Unlock boosts, premium strategies, private leagues, and fee perks.</p></div>
+      <div class="card utility"><h4>Governance</h4><p>Vote on new pairs, rules, model support, and treasury priorities.</p></div>
+    </div>
+    <div class="footer"><span>Distribution + Utility</span><span>2</span></div>
+  </section>
+
+  <section class="page">
+    <h2>TGE Plan + Integration Roadmap</h2>
+    <div class="big-row">
+      <div class="bigbox"><div class="n">Public Sale Allocation</div><div class="v">20M</div><p>2.0% of total supply</p></div>
+      <div class="bigbox"><div class="n">Sale Unlock at TGE</div><div class="v">25%</div><p>75% linear over 6 months</p></div>
+      <div class="bigbox"><div class="n">Liquidity Bucket</div><div class="v">100M</div><p>40M unlocked at TGE for LP/MM</p></div>
+      <div class="bigbox"><div class="n">Launch Float</div><div class="v">101.9M</div><p>Conservative float at TGE</p></div>
+    </div>
+    <div style="height:12px"></div>
+    <div class="phase-grid">
+      <div class="card phase"><div class="num">Phase 1</div><h4>Token Launch + Staking</h4><ul><li>GEMBOT deployment</li><li>TGE / IDO execution</li><li>DEX liquidity</li><li>Staking goes live</li></ul></div>
+      <div class="card phase"><div class="num">Phase 2</div><h4>Compete-to-Earn</h4><ul><li>NFA-linked rewards</li><li>ELO-adjusted emissions</li><li>Daily cap enforcement</li><li>Anti-farming controls</li></ul></div>
+      <div class="card phase"><div class="num">Phase 3</div><h4>Betting + Governance</h4><ul><li>Battle betting</li><li>Burn mechanics</li><li>Voting for rules and pairs</li><li>Private leagues</li></ul></div>
+    </div>
+    <div style="height:12px"></div>
+    <div class="card">
+      <h3>Investment narrative</h3>
+      <p><b style="color:white">GemBots Arena brings tokenized AI competition to BNB Chain.</b> GEMBOT is designed to convert real product traction — already proven by 749K+ battles — into a scalable game economy powered by minting, staking, rewards, betting, governance, and treasury-backed growth.</p>
+    </div>
+    <div class="footer"><span>TGE + Roadmap</span><span>3</span></div>
+  </section>
+</body>
+</html>
