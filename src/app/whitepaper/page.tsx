@@ -15,9 +15,8 @@ const SECTIONS = [
   { id: 'evolution', label: '4. Evolution & Tiers' },
   { id: 'marketplace', label: '5. Marketplace & Economics' },
   { id: 'battle-system', label: '6. Battle System' },
-  { id: 'tokenomics', label: '7. Tokenomics' },
-  { id: 'roadmap', label: '8. Roadmap' },
-  { id: 'open-source', label: '9. Open Source & Transparency' },
+  { id: 'roadmap', label: '7. Roadmap' },
+  { id: 'open-source', label: '8. Open Source & Transparency' },
 ];
 
 function GitHubIcon({ className = 'w-4 h-4' }: { className?: string }) {
@@ -270,35 +269,9 @@ export default function WhitepaperPage() {
           </p>
         </section>
 
-        {/* ─── 7. TOKENOMICS ─── */}
-        <section id="tokenomics" className="mb-16">
-          <h2 className="text-2xl font-black text-[#F0B90B] mb-4 pb-2 border-b border-[#F0B90B]/20">7. Tokenomics</h2>
-          <p className="leading-relaxed mb-4">
-            The GemBots economy is powered by BNB (gas + NFA trading) and NFAs (the core asset class). Revenue streams:
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            {[
-              { title: 'Minting Revenue', desc: 'Users pay BNB to mint NFAs. A portion funds the prize pool for tournaments.' },
-              { title: 'Marketplace Fees', desc: '5% platform fee + 2.5% creator royalty on every NFA sale.' },
-              { title: 'NFA Trading', desc: 'Buy, sell, and trade AI agents on the marketplace. 5% platform fee + 2.5% creator royalties.' },
-              { title: 'Premium Features', desc: 'Advanced AI models, custom fine-tuning, and priority matchmaking for higher-tier NFAs.' },
-            ].map((item, i) => (
-              <div key={i} className="p-4 rounded-xl border border-gray-800 bg-gray-900/40">
-                <h4 className="font-bold text-white mb-1">{item.title}</h4>
-                <p className="text-sm text-gray-400">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          <p className="leading-relaxed text-sm text-gray-500">
-            Note: A native $GEMB token is under consideration for Phase 4 — governance, staking, and tournament prize pools. This will be announced separately with a detailed tokenomics paper.
-          </p>
-        </section>
-
-        {/* ─── 8. ROADMAP ─── */}
+        {/* ─── 7. ROADMAP ─── */}
         <section id="roadmap" className="mb-16">
-          <h2 className="text-2xl font-black text-[#F0B90B] mb-4 pb-2 border-b border-[#F0B90B]/20">8. Roadmap</h2>
+          <h2 className="text-2xl font-black text-[#F0B90B] mb-4 pb-2 border-b border-[#F0B90B]/20">7. Roadmap</h2>
 
           <div className="space-y-6">
             {[
@@ -349,9 +322,9 @@ export default function WhitepaperPage() {
           </div>
         </section>
 
-        {/* ─── 9. OPEN SOURCE & TRANSPARENCY ─── */}
+        {/* ─── 8. OPEN SOURCE & TRANSPARENCY ─── */}
         <section id="open-source" className="mb-16">
-          <h2 className="text-2xl font-black text-green-400 mb-4 pb-2 border-b border-green-500/20">9. Open Source &amp; Transparency</h2>
+          <h2 className="text-2xl font-black text-green-400 mb-4 pb-2 border-b border-green-500/20">8. Open Source &amp; Transparency</h2>
           
           <p className="leading-relaxed mb-6">
             GemBots Arena is fully open source under the <strong className="text-white">MIT License</strong>. This means anyone can view, fork, modify, and deploy the entire platform. We believe open source is the only way to build trust in AI-powered financial systems.
