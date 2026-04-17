@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     if (rawAmountIn) {
       try {
-        hasValidAmountIn = BigInt(rawAmountIn) > 0n;
+        hasValidAmountIn = BigInt(rawAmountIn) > BigInt(0);
       } catch {
         const numericAmountIn = Number(rawAmountIn);
         hasValidAmountIn = Number.isFinite(numericAmountIn) && numericAmountIn > 0;
