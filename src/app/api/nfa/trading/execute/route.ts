@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getOnChainOwnerAddress } from '@/lib/security/trading-ownership';
-import { TradingAuthError, authorizeTradingMutation } from '@/lib/security/trading-auth';
+import { TradingAuthError, verifyTradeSignature } from '@/lib/security/trading-auth';
 import { ZeroAddress, isAddress } from 'ethers';
 import { executeTrade, TradeOrder, checkLiveTradingReadiness } from '@/lib/bsc/trade-executor';
 import {
@@ -22,7 +22,7 @@ interface ExecuteRequestBody {
   action: 'BUY' | 'SELL';
   tokenIn: string;
   tokenOut: string;
-  amountIn: number;
+  amountIn: number | string;
   slippageBps?: number;
   pair?: string;
   confidence?: number;
@@ -82,13 +82,17 @@ export async function POST(request: NextRequest) {
 
     let normalizedOwnerAddress = body.ownerAddress;
     try {
-      const auth = await authorizeTradingMutation({
+      const auth = await verifyTradeSignature({
         nfaId: body.nfaId,
         ownerAddress: body.ownerAddress,
         signedMessage: body.signedMessage,
         signature: body.signature,
         nonce: body.nonce,
         timestamp: body.timestamp,
+        action: body.action,
+        tokenIn: body.tokenIn,
+        tokenOut: body.tokenOut,
+        amountIn: body.amountIn,
       });
       normalizedOwnerAddress = auth.ownerAddress;
     } catch (error) {

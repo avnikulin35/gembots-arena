@@ -3,6 +3,8 @@ import { isAddress, verifyMessage } from 'ethers';
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const TRADING_CHAIN_ID = 56;
+const TRADING_CONTRACT = (process.env.NEXT_PUBLIC_BSC_NFA_CONTRACT_ADDRESS || 'unknown').toLowerCase();
 
 if (!supabaseUrl) {
   throw new Error('SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) is required for trading auth');
@@ -26,13 +28,22 @@ export class TradingAuthError extends Error {
   }
 }
 
-export interface TradingAuthPayload {
+interface BaseAuthPayload {
   nfaId: number;
   ownerAddress: string;
   signedMessage: string;
   signature: string;
   nonce: string;
   timestamp: number | string;
+}
+
+export interface WalletSignaturePayload extends BaseAuthPayload {}
+
+export interface TradeSignaturePayload extends BaseAuthPayload {
+  action: 'BUY' | 'SELL' | string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string | number;
 }
 
 function normalizeTimestamp(value: number | string): string {
@@ -49,8 +60,61 @@ function parseTimestampMs(value: string): number {
   return numeric;
 }
 
-export function buildTradingMessage(nfaId: number, nonce: string, timestamp: number | string): string {
+function normalizeOwnerAddress(ownerAddress: string): string {
+  if (!ownerAddress || !isAddress(ownerAddress)) {
+    throw new TradingAuthError('ownerAddress must be a valid EVM address', 400);
+  }
+  return ownerAddress;
+}
+
+function validateBasePayload(payload: BaseAuthPayload): { timestamp: string } {
+  if (!Number.isInteger(payload.nfaId) || payload.nfaId <= 0) {
+    throw new TradingAuthError('nfaId must be a positive integer', 400);
+  }
+
+  normalizeOwnerAddress(payload.ownerAddress);
+
+  if (!payload.nonce || !UUID_REGEX.test(payload.nonce)) {
+    throw new TradingAuthError('nonce must be a valid uuid', 400);
+  }
+
+  if (!payload.signature || !payload.signature.startsWith('0x')) {
+    throw new TradingAuthError('signature is required', 400);
+  }
+
+  if (!payload.signedMessage || typeof payload.signedMessage !== 'string') {
+    throw new TradingAuthError('signedMessage is required', 400);
+  }
+
+  const timestamp = normalizeTimestamp(payload.timestamp);
+  const timestampMs = parseTimestampMs(timestamp);
+  if (Math.abs(Date.now() - timestampMs) > SIGNATURE_MAX_AGE_MS) {
+    throw new TradingAuthError('timestamp expired or invalid', 401);
+  }
+
+  return { timestamp };
+}
+
+export function buildWalletMessage(nfaId: number, nonce: string, timestamp: number | string): string {
   return `GemBots Trade|nfaId=${nfaId}|nonce=${nonce}|timestamp=${normalizeTimestamp(timestamp)}`;
+}
+
+export function buildTradeMessage(payload: {
+  nfaId: number;
+  action: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string | number;
+  nonce: string;
+  timestamp: number | string;
+}): string {
+  const action = String(payload.action).toUpperCase();
+  const tokenIn = String(payload.tokenIn).toLowerCase();
+  const tokenOut = String(payload.tokenOut).toLowerCase();
+  const amountIn = String(payload.amountIn);
+  const nonce = payload.nonce;
+  const timestamp = normalizeTimestamp(payload.timestamp);
+  return `GemBots Trade|chainId=${TRADING_CHAIN_ID}|contract=${TRADING_CONTRACT}|nfaId=${payload.nfaId}|action=${action}|tokenIn=${tokenIn}|tokenOut=${tokenOut}|amountIn=${amountIn}|nonce=${nonce}|timestamp=${timestamp}`;
 }
 
 async function markNonceUsed(nonce: string): Promise<void> {
@@ -71,49 +135,65 @@ async function markNonceUsed(nonce: string): Promise<void> {
   throw new Error(`Failed to persist nonce: ${error.message}`);
 }
 
-export async function authorizeTradingMutation(payload: TradingAuthPayload): Promise<{ ownerAddress: string; message: string }> {
-  const { nfaId, ownerAddress, signedMessage, signature, nonce } = payload;
-
-  if (!Number.isInteger(nfaId) || nfaId <= 0) {
-    throw new TradingAuthError('nfaId must be a positive integer', 400);
-  }
-
-  if (!ownerAddress || !isAddress(ownerAddress)) {
-    throw new TradingAuthError('ownerAddress must be a valid EVM address', 400);
-  }
-
-  if (!nonce || !UUID_REGEX.test(nonce)) {
-    throw new TradingAuthError('nonce must be a valid uuid', 400);
-  }
-
-  if (!signature || !signature.startsWith('0x')) {
-    throw new TradingAuthError('signature is required', 400);
-  }
-
-  if (!signedMessage || typeof signedMessage !== 'string') {
-    throw new TradingAuthError('signedMessage is required', 400);
-  }
-
-  const timestamp = normalizeTimestamp(payload.timestamp);
-  const timestampMs = parseTimestampMs(timestamp);
-  if (Math.abs(Date.now() - timestampMs) > SIGNATURE_MAX_AGE_MS) {
-    throw new TradingAuthError('timestamp expired or invalid', 401);
-  }
-
-  const expectedMessage = buildTradingMessage(nfaId, nonce, timestamp);
-  if (signedMessage !== expectedMessage) {
-    throw new TradingAuthError('signed message mismatch', 401);
-  }
-
-  const recoveredAddress = verifyMessage(expectedMessage, signature);
-  if (recoveredAddress.toLowerCase() != ownerAddress.toLowerCase()) {
+async function verifySignedMessage(payload: BaseAuthPayload, expectedMessage: string): Promise<{ ownerAddress: string; message: string }> {
+  const recoveredAddress = verifyMessage(expectedMessage, payload.signature);
+  if (recoveredAddress.toLowerCase() !== payload.ownerAddress.toLowerCase()) {
     throw new TradingAuthError('signature verification failed', 401);
   }
 
-  await markNonceUsed(nonce);
+  await markNonceUsed(payload.nonce);
 
   return {
     ownerAddress: recoveredAddress,
     message: expectedMessage,
   };
+}
+
+/**
+ * Wallet operations use a narrower signature because they do not bind trade execution parameters.
+ */
+export async function verifyWalletSignature(payload: WalletSignaturePayload): Promise<{ ownerAddress: string; message: string }> {
+  const { timestamp } = validateBasePayload(payload);
+  const expectedMessage = buildWalletMessage(payload.nfaId, payload.nonce, timestamp);
+
+  if (payload.signedMessage !== expectedMessage) {
+    throw new TradingAuthError('signed message mismatch', 401);
+  }
+
+  return verifySignedMessage(payload, expectedMessage);
+}
+
+/**
+ * Trade execution must bind every mutating trade parameter to the signature.
+ */
+export async function verifyTradeSignature(payload: TradeSignaturePayload): Promise<{ ownerAddress: string; message: string }> {
+  const { timestamp } = validateBasePayload(payload);
+
+  if (!payload.action || !['BUY', 'SELL'].includes(String(payload.action).toUpperCase())) {
+    throw new TradingAuthError('action must be BUY or SELL', 400);
+  }
+
+  if (!payload.tokenIn || !payload.tokenOut) {
+    throw new TradingAuthError('tokenIn and tokenOut are required', 400);
+  }
+
+  if (payload.amountIn === undefined || payload.amountIn === null || String(payload.amountIn) === '') {
+    throw new TradingAuthError('amountIn is required', 400);
+  }
+
+  const expectedMessage = buildTradeMessage({
+    nfaId: payload.nfaId,
+    action: payload.action,
+    tokenIn: payload.tokenIn,
+    tokenOut: payload.tokenOut,
+    amountIn: payload.amountIn,
+    nonce: payload.nonce,
+    timestamp,
+  });
+
+  if (payload.signedMessage !== expectedMessage) {
+    throw new TradingAuthError('signed message mismatch', 401);
+  }
+
+  return verifySignedMessage(payload, expectedMessage);
 }

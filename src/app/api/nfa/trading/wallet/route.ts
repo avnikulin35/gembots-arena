@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { encryptPrivateKey } from '@/lib/security/wallet-crypto';
 import { getOnChainOwnerAddress } from '@/lib/security/trading-ownership';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { TradingAuthError, authorizeTradingMutation } from '@/lib/security/trading-auth';
+import { TradingAuthError, verifyWalletSignature } from '@/lib/security/trading-auth';
 import { ZeroAddress, isAddress } from 'ethers';
 
 const WALLET_RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     let normalizedOwnerAddress = ownerAddress;
     try {
-      const auth = await authorizeTradingMutation({
+      const auth = await verifyWalletSignature({
         nfaId: parseInt(nfaId),
         ownerAddress,
         signedMessage,
