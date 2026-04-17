@@ -61,10 +61,26 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { nfaId, ownerAddress, signedMessage, signature, nonce, timestamp } = body;
 
-    if (!nfaId || !ownerAddress || !signedMessage || !signature || !nonce || timestamp === undefined || timestamp === null || timestamp === '') {
+    const missingFields = [];
+    const missingAuth = [];
+    if (!nfaId) missingFields.push('nfaId');
+    if (!ownerAddress) missingFields.push('ownerAddress');
+    if (!signedMessage) missingAuth.push('signedMessage');
+    if (!signature) missingAuth.push('signature');
+    if (!nonce) missingAuth.push('nonce');
+    if (timestamp === undefined || timestamp === null || timestamp === '') missingAuth.push('timestamp');
+
+    if (missingFields.length > 0) {
       return NextResponse.json(
-        { error: 'nfaId, ownerAddress, signedMessage, signature, nonce, and timestamp are required' },
+        { error: `${missingFields.join(', ')} are required` },
         { status: 400 }
+      );
+    }
+
+    if (missingAuth.length > 0) {
+      return NextResponse.json(
+        { error: `Unauthorized: missing auth fields: ${missingAuth.join(', ')}` },
+        { status: 401 }
       );
     }
 

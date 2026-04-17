@@ -52,20 +52,27 @@ export async function POST(request: NextRequest) {
     const body: ExecuteRequestBody = await request.json();
 
     const missing: string[] = [];
+    const missingAuth: string[] = [];
     if (!body.nfaId) missing.push('nfaId');
     if (!body.ownerAddress) missing.push('ownerAddress');
     if (!body.action || !['BUY', 'SELL'].includes(body.action)) missing.push('action (BUY/SELL)');
     if (!body.tokenIn) missing.push('tokenIn');
     if (!body.tokenOut) missing.push('tokenOut');
     if (!body.amountIn || body.amountIn <= 0) missing.push('valid amountIn');
-    if (!body.signedMessage) missing.push('signedMessage');
-    if (!body.signature) missing.push('signature');
-    if (!body.nonce) missing.push('nonce');
-    if (body.timestamp === undefined || body.timestamp === null || body.timestamp === '') missing.push('timestamp');
+    if (!body.signedMessage) missingAuth.push('signedMessage');
+    if (!body.signature) missingAuth.push('signature');
+    if (!body.nonce) missingAuth.push('nonce');
+    if (body.timestamp === undefined || body.timestamp === null || body.timestamp === '') missingAuth.push('timestamp');
     if (missing.length > 0) {
       return NextResponse.json(
         { error: `Missing fields: ${missing.join(', ')}` },
         { status: 400 },
+      );
+    }
+    if (missingAuth.length > 0) {
+      return NextResponse.json(
+        { error: `Unauthorized: missing auth fields: ${missingAuth.join(', ')}` },
+        { status: 401 },
       );
     }
 
