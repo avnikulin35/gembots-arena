@@ -87,33 +87,30 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ─── On-chain ownership verification (best-effort) ───
-    // If the NFT is reachable on-chain and caller is NOT the registered owner → deny.
-    // If the on-chain call itself fails (RPC down etc.), fall back to DB-only check
-    // so we don't break legitimate users during chain outages.
+    // ─── On-chain ownership verification (fail-closed for mutating actions) ───
     let onChainOwner: string | null = null;
-    let chainReachable = true;
     try {
       onChainOwner = await getOnChainOwnerAddress(parseInt(nfaId));
-    } catch {
-      // RPC / network issue — best-effort: fall through to DB
-      chainReachable = false;
+    } catch (error) {
+      console.warn('[Wallet] On-chain ownership check failed:', error instanceof Error ? error.message : 'unknown error');
+      return NextResponse.json(
+        { error: 'chain unreachable, try again' },
+        { status: 503 }
+      );
     }
 
-    if (chainReachable) {
-      if (!onChainOwner || onChainOwner === ZeroAddress) {
-        // NFT doesn't exist on-chain at all — suspicious but let DB decide
-        /* skip — fall through to DB check */
-      } else if (
-        onChainOwner.toLowerCase() !== ownerAddress.toLowerCase()
-      ) {
-        // Chain reachable, NFT exists, claimed owner ≠ real owner → HARD DENY
-        return NextResponse.json(
-          { error: 'Not the owner of this NFA (on-chain verification failed)' },
-          { status: 403 }
-        );
-      }
-      // onChainOwner matches → great, continue to DB check as additional guard
+    if (!onChainOwner || onChainOwner === ZeroAddress) {
+      return NextResponse.json(
+        { error: 'NFA owner unavailable on-chain' },
+        { status: 503 }
+      );
+    }
+
+    if (onChainOwner.toLowerCase() !== ownerAddress.toLowerCase()) {
+      return NextResponse.json(
+        { error: 'Not the owner of this NFA (on-chain verification failed)' },
+        { status: 403 }
+      );
     }
 
     // ─── DB-level ownership check (always enforced) ───

@@ -109,21 +109,27 @@ export async function POST(request: NextRequest) {
     }
 
     // ── On-chain ownership verification ─────────────────────
-    let chainReachable = true;
     try {
       const onChainOwner = await getOnChainOwnerAddress(nfaId);
-      if (onChainOwner && onChainOwner !== ZeroAddress) {
-        if (onChainOwner.toLowerCase() !== body.ownerAddress.toLowerCase()) {
-          return NextResponse.json(
-            { error: 'Not the owner of this NFA (on-chain verification failed)' },
-            { status: 403 },
-          );
-        }
+      if (!onChainOwner || onChainOwner === ZeroAddress) {
+        return NextResponse.json(
+          { error: 'NFA owner unavailable on-chain' },
+          { status: 503 },
+        );
       }
-    } catch {
-      // RPC down — best-effort, fall through to DB check
-      chainReachable = false;
-      console.warn('[Execute] On-chain ownership check skipped (RPC unavailable)');
+
+      if (onChainOwner.toLowerCase() !== body.ownerAddress.toLowerCase()) {
+        return NextResponse.json(
+          { error: 'Not the owner of this NFA (on-chain verification failed)' },
+          { status: 403 },
+        );
+      }
+    } catch (error) {
+      console.warn('[Execute] On-chain ownership check failed:', error instanceof Error ? error.message : 'unknown error');
+      return NextResponse.json(
+        { error: 'chain unreachable, try again' },
+        { status: 503 },
+      );
     }
 
     // ── DB ownership check (always enforced) ────────────────
