@@ -2,20 +2,19 @@
  * POST /api/nfa/trading/execute
  *
  * Live trade execution endpoint for NFA Trading League.
- * Validates ownership, trading mode, risk limits, then executes via PancakeSwap.
+ * Validates signed ownership intent, trading mode, risk limits, then executes via PancakeSwap.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { getOnChainOwnerAddress } from '@/lib/security/trading-ownership';
-import { ZeroAddress } from 'ethers';
+import { TradingAuthError, authorizeTradingMutation } from '@/lib/security/trading-auth';
+import { ZeroAddress, isAddress } from 'ethers';
 import { executeTrade, TradeOrder, checkLiveTradingReadiness } from '@/lib/bsc/trade-executor';
 import {
   isLiveTradingEnabled,
   DEFAULT_SLIPPAGE_BPS,
 } from '@/lib/bsc/pancakeswap';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ExecuteRequestBody {
   nfaId: number;
@@ -28,12 +27,14 @@ interface ExecuteRequestBody {
   pair?: string;
   confidence?: number;
   reasoning?: string;
+  signedMessage: string;
+  signature: string;
+  nonce: string;
+  timestamp: number | string;
 }
 
-const EXECUTE_RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
-const EXECUTE_RATE_LIMIT_MAX = 10;
-
-// ─── GET: Check live trading readiness ────────────────────────────────────────
+const EXECUTE_RATE_LIMIT_WINDOW_MS = 60_000;
+const EXECUTE_RATE_LIMIT_MAX = 5;
 
 export async function GET() {
   const readiness = checkLiveTradingReadiness();
@@ -43,17 +44,13 @@ export async function GET() {
   });
 }
 
-// ─── POST: Execute a trade ───────────────────────────────────────────────────
-
 export async function POST(request: NextRequest) {
-  // Rate limit
   const rateLimitResponse = checkRateLimit(request, EXECUTE_RATE_LIMIT_MAX, EXECUTE_RATE_LIMIT_WINDOW_MS);
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
     const body: ExecuteRequestBody = await request.json();
 
-    // ── Validation ──────────────────────────────────────────
     const missing: string[] = [];
     if (!body.nfaId) missing.push('nfaId');
     if (!body.ownerAddress) missing.push('ownerAddress');
@@ -61,6 +58,10 @@ export async function POST(request: NextRequest) {
     if (!body.tokenIn) missing.push('tokenIn');
     if (!body.tokenOut) missing.push('tokenOut');
     if (!body.amountIn || body.amountIn <= 0) missing.push('valid amountIn');
+    if (!body.signedMessage) missing.push('signedMessage');
+    if (!body.signature) missing.push('signature');
+    if (!body.nonce) missing.push('nonce');
+    if (body.timestamp === undefined || body.timestamp === null || body.timestamp === '') missing.push('timestamp');
     if (missing.length > 0) {
       return NextResponse.json(
         { error: `Missing fields: ${missing.join(', ')}` },
@@ -68,7 +69,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Check live trading enabled ─────────────────────────
+    if (!isAddress(body.ownerAddress)) {
+      return NextResponse.json({ error: 'ownerAddress must be a valid EVM address' }, { status: 400 });
+    }
+
+    let normalizedOwnerAddress = body.ownerAddress;
+    try {
+      const auth = await authorizeTradingMutation({
+        nfaId: body.nfaId,
+        ownerAddress: body.ownerAddress,
+        signedMessage: body.signedMessage,
+        signature: body.signature,
+        nonce: body.nonce,
+        timestamp: body.timestamp,
+      });
+      normalizedOwnerAddress = auth.ownerAddress;
+    } catch (error) {
+      if (error instanceof TradingAuthError) {
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
+      throw error;
+    }
+
     if (!isLiveTradingEnabled()) {
       return NextResponse.json(
         { error: 'Live trading is not enabled. Set NFA_LIVE_TRADING_ENABLED=true' },
@@ -78,7 +100,6 @@ export async function POST(request: NextRequest) {
 
     const nfaId = body.nfaId;
 
-    // ── Find bot ────────────────────────────────────────────
     const { data: bot, error: botErr } = await supabase
       .from('bots')
       .select('id, nfa_id, name, wallet_address, trading_wallet_address, trading_wallet_encrypted, trading_mode')
@@ -89,7 +110,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'NFA bot not found' }, { status: 404 });
     }
 
-    // ── Check wallet exists ─────────────────────────────────
     if (!bot.trading_wallet_address || !bot.trading_wallet_encrypted) {
       return NextResponse.json(
         { error: 'Trading wallet not configured. Create a wallet first.' },
@@ -97,7 +117,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Check trading mode ──────────────────────────────────
     if (bot.trading_mode !== 'live') {
       return NextResponse.json(
         {
@@ -108,7 +127,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── On-chain ownership verification ─────────────────────
     try {
       const onChainOwner = await getOnChainOwnerAddress(nfaId);
       if (!onChainOwner || onChainOwner === ZeroAddress) {
@@ -118,7 +136,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (onChainOwner.toLowerCase() !== body.ownerAddress.toLowerCase()) {
+      if (onChainOwner.toLowerCase() !== normalizedOwnerAddress.toLowerCase()) {
         return NextResponse.json(
           { error: 'Not the owner of this NFA (on-chain verification failed)' },
           { status: 403 },
@@ -132,15 +150,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── DB ownership check (always enforced) ────────────────
-    if (bot.wallet_address?.toLowerCase() !== body.ownerAddress.toLowerCase()) {
+    if (bot.wallet_address?.toLowerCase() !== normalizedOwnerAddress.toLowerCase()) {
       return NextResponse.json(
         { error: 'Not the owner of this NFA bot' },
         { status: 403 },
       );
     }
 
-    // ── Build trade order ────────────────────────────────────
     const slippageBps = body.slippageBps
       ? Math.min(Number(body.slippageBps), 200)
       : DEFAULT_SLIPPAGE_BPS;
@@ -158,7 +174,6 @@ export async function POST(request: NextRequest) {
       reasoning: body.reasoning ?? undefined,
     };
 
-    // ── Execute trade ────────────────────────────────────────
     const result = await executeTrade(order);
 
     return NextResponse.json({
@@ -172,11 +187,9 @@ export async function POST(request: NextRequest) {
       error: result.error || null,
       timestamp: result.timestamp,
     }, { status: result.success ? 200 : 400 });
-
   } catch (err: any) {
     console.error('POST /api/nfa/trading/execute error:', err);
 
-    // Never leak private keys or internal details
     const isClientSafe = err.message?.includes('insufficient') ||
       err.message?.includes('not found') ||
       err.message?.includes('not the owner');

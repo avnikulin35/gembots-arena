@@ -2,15 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { encryptPrivateKey } from '@/lib/security/wallet-crypto';
 import { getOnChainOwnerAddress } from '@/lib/security/trading-ownership';
-import { checkRateLimit, getClientIP } from '@/lib/rate-limit';
-import { ZeroAddress } from 'ethers';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { TradingAuthError, authorizeTradingMutation } from '@/lib/security/trading-auth';
+import { ZeroAddress, isAddress } from 'ethers';
 
-// ─── Rate limit for wallet creation: 5 requests per 10 minutes per IP ───
-const WALLET_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
-
-// ─── GET: Get wallet info for NFA ────────────────────────────────────────────
+const WALLET_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const WALLET_RATE_LIMIT_MAX = 5;
+const WALLET_GET_RATE_LIMIT_WINDOW_MS = 10 * 1000;
+const WALLET_GET_RATE_LIMIT_MAX = 5;
 
 export async function GET(request: NextRequest) {
+  const rateLimitResponse = checkRateLimit(request, WALLET_GET_RATE_LIMIT_MAX, WALLET_GET_RATE_LIMIT_WINDOW_MS);
+  if (rateLimitResponse) return rateLimitResponse;
+
   const nfaId = request.nextUrl.searchParams.get('nfaId');
 
   if (!nfaId) {
@@ -28,7 +32,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
     }
 
-    // Get trading stats
     const { data: stats } = await supabase
       .from('nfa_trading_stats')
       .select('*')
@@ -44,31 +47,49 @@ export async function GET(request: NextRequest) {
       config: bot.trading_config || {},
       stats: stats || null,
     });
-  } catch (err) {
+  } catch {
     console.error('GET /api/nfa/trading/wallet error');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// ─── POST: Create wallet for NFA ─────────────────────────────────────────────
-
 export async function POST(request: NextRequest) {
-  // Rate limit: 5 wallet creation requests per 10 minutes per IP
-  const rateLimitResponse = checkRateLimit(request, 5, WALLET_RATE_LIMIT_WINDOW_MS);
+  const rateLimitResponse = checkRateLimit(request, WALLET_RATE_LIMIT_MAX, WALLET_RATE_LIMIT_WINDOW_MS);
   if (rateLimitResponse) return rateLimitResponse;
 
   try {
     const body = await request.json();
-    const { nfaId, ownerAddress } = body;
+    const { nfaId, ownerAddress, signedMessage, signature, nonce, timestamp } = body;
 
-    if (!nfaId || !ownerAddress) {
+    if (!nfaId || !ownerAddress || !signedMessage || !signature || !nonce || timestamp === undefined || timestamp === null || timestamp === '') {
       return NextResponse.json(
-        { error: 'nfaId and ownerAddress are required' },
+        { error: 'nfaId, ownerAddress, signedMessage, signature, nonce, and timestamp are required' },
         { status: 400 }
       );
     }
 
-    // Find bot with this nfa_id
+    if (!isAddress(ownerAddress)) {
+      return NextResponse.json({ error: 'ownerAddress must be a valid EVM address' }, { status: 400 });
+    }
+
+    let normalizedOwnerAddress = ownerAddress;
+    try {
+      const auth = await authorizeTradingMutation({
+        nfaId: parseInt(nfaId),
+        ownerAddress,
+        signedMessage,
+        signature,
+        nonce,
+        timestamp,
+      });
+      normalizedOwnerAddress = auth.ownerAddress;
+    } catch (error) {
+      if (error instanceof TradingAuthError) {
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
+      throw error;
+    }
+
     const { data: bot, error: findError } = await supabase
       .from('bots')
       .select('id, nfa_id, wallet_address, trading_wallet_address')
@@ -79,7 +100,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bot not found' }, { status: 404 });
     }
 
-    // Early exit — wallet already exists (before on-chain / DB checks)
     if (bot.trading_wallet_address) {
       return NextResponse.json({
         wallet: bot.trading_wallet_address,
@@ -87,7 +107,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ─── On-chain ownership verification (fail-closed for mutating actions) ───
     let onChainOwner: string | null = null;
     try {
       onChainOwner = await getOnChainOwnerAddress(parseInt(nfaId));
@@ -106,25 +125,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (onChainOwner.toLowerCase() !== ownerAddress.toLowerCase()) {
+    if (onChainOwner.toLowerCase() !== normalizedOwnerAddress.toLowerCase()) {
       return NextResponse.json(
         { error: 'Not the owner of this NFA (on-chain verification failed)' },
         { status: 403 }
       );
     }
 
-    // ─── DB-level ownership check (always enforced) ───
-    if (bot.wallet_address?.toLowerCase() !== ownerAddress.toLowerCase()) {
+    if (bot.wallet_address?.toLowerCase() !== normalizedOwnerAddress.toLowerCase()) {
       return NextResponse.json({ error: 'Not the owner of this NFA bot' }, { status: 403 });
     }
 
-    // ─── Generate and persist wallet ───
     const { ethers } = await import('ethers');
     const wallet = ethers.Wallet.createRandom();
     const address = wallet.address;
     const privateKey = wallet.privateKey;
 
-    // Encrypt private key with AES-256-GCM (shared helper)
     const encrypted = encryptPrivateKey(privateKey);
 
     const { error: updateError } = await supabase
@@ -139,7 +155,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to save wallet' }, { status: 500 });
     }
 
-    // Initialize trading stats (ignore conflict)
     try {
       await supabase
         .from('nfa_trading_stats')
@@ -155,7 +170,7 @@ export async function POST(request: NextRequest) {
       wallet: address,
       message: 'Trading wallet created successfully',
     });
-  } catch (err) {
+  } catch {
     console.error('POST /api/nfa/trading/wallet error');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
