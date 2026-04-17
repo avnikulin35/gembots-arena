@@ -294,8 +294,8 @@ export function checkLiveTradingReadiness(): { ready: boolean; issues: string[] 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
     issues.push('NEXT_PUBLIC_SUPABASE_URL is not set');
   }
-  if (!supabaseKey) {
-    issues.push('Supabase service key is not set');
+  if (!supabaseServiceRoleKey) {
+    issues.push('Supabase service role key is not set');
   }
 
   return { ready: issues.length === 0, issues };
