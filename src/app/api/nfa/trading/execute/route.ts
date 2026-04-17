@@ -75,16 +75,16 @@ export async function POST(request: NextRequest) {
     if (!body.signature) missingAuth.push('signature');
     if (!body.nonce) missingAuth.push('nonce');
     if (body.timestamp === undefined || body.timestamp === null || body.timestamp === '') missingAuth.push('timestamp');
-    if (missing.length > 0) {
-      return NextResponse.json(
-        { error: `Missing fields: ${missing.join(', ')}` },
-        { status: 400 },
-      );
-    }
     if (missingAuth.length > 0) {
       return NextResponse.json(
         { error: `Unauthorized: missing auth fields: ${missingAuth.join(', ')}` },
         { status: 401 },
+      );
+    }
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { error: `Missing fields: ${missing.join(', ')}` },
+        { status: 400 },
       );
     }
 
