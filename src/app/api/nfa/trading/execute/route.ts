@@ -53,12 +53,24 @@ export async function POST(request: NextRequest) {
 
     const missing: string[] = [];
     const missingAuth: string[] = [];
+    const rawAmountIn = typeof body.amountIn === 'string' ? body.amountIn.trim() : String(body.amountIn ?? '');
+    let hasValidAmountIn = false;
+
+    if (rawAmountIn) {
+      try {
+        hasValidAmountIn = BigInt(rawAmountIn) > 0n;
+      } catch {
+        const numericAmountIn = Number(rawAmountIn);
+        hasValidAmountIn = Number.isFinite(numericAmountIn) && numericAmountIn > 0;
+      }
+    }
+
     if (!body.nfaId) missing.push('nfaId');
     if (!body.ownerAddress) missing.push('ownerAddress');
     if (!body.action || !['BUY', 'SELL'].includes(body.action)) missing.push('action (BUY/SELL)');
     if (!body.tokenIn) missing.push('tokenIn');
     if (!body.tokenOut) missing.push('tokenOut');
-    if (!body.amountIn || body.amountIn <= 0) missing.push('valid amountIn');
+    if (!hasValidAmountIn) missing.push('valid amountIn');
     if (!body.signedMessage) missingAuth.push('signedMessage');
     if (!body.signature) missingAuth.push('signature');
     if (!body.nonce) missingAuth.push('nonce');
